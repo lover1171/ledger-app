@@ -1,0 +1,8 @@
+{
+  "name": "오프라인 가계부",
+  "short_name": "가계부",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f6fa",
+  "theme_color": "#111827"
+}
