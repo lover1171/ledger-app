@@ -1,1569 +1,1498 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>오프라인 가계부</title>
+  <title>오프라인 가계부 앱</title>
   <style>
     :root{
-      --bg:#f6f7fb; --card:#fff; --line:#e8ecf3; --txt:#111827; --muted:#6b7280;
-      --accent:#111827; --soft:#f3f4f6;
-      --ok:#10b981; --bad:#f97316; --blue:#2563eb;
+      --bg:#0b1020;
+      --panel:#121a33;
+      --panel2:#0f1630;
+      --text:#e9ecf5;
+      --muted:#aab2d5;
+      --line:rgba(255,255,255,.10);
+      --good:#2dd4bf;
+      --bad:#fb7185;
+      --warn:#fbbf24;
+      --chip:#1b2750;
+      --btn:#1a2650;
+      --btn2:#24346b;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
     }
-    *{box-sizing:border-box}
-    body{margin:0; font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif; background:var(--bg); color:var(--txt);}
-    .wrap{max-width:1100px; margin:0 auto; padding:14px;}
-    .topbar{display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px;}
-    .tabs{display:flex; gap:8px; flex-wrap:wrap;}
-    .tab{padding:10px 12px; border:1px solid var(--line); background:var(--card); border-radius:12px; cursor:pointer; font-weight:800;}
-    .tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
-    .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px; box-shadow:0 6px 18px rgba(0,0,0,.05);}
-    .muted{color:var(--muted); font-size:12px;}
-    .row{display:flex; gap:10px; flex-wrap:wrap;}
-    .grid{display:grid; gap:10px;}
-    .grid-2{grid-template-columns:1fr 1fr;}
-    .grid-3{grid-template-columns:1fr 1fr 1fr;}
-    .grid-4{grid-template-columns:1fr 1fr 1fr 1fr;}
-    .divider3{margin:18px 0 0; height:36px;} /* “3줄 건너띄기” 느낌 */
-    .h2{font-size:16px; font-weight:900; margin:0 0 8px;}
-    label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:800;}
-    input,select,textarea{
-      width:100%; padding:10px; border:1px solid var(--line); border-radius:12px; background:#fff; font-size:14px;
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      background: radial-gradient(1200px 700px at 20% 0%, #182357 0%, var(--bg) 55%);
+      color:var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, "Noto Sans KR", Arial, sans-serif;
+      line-height:1.4;
     }
-    textarea{min-height:44px; resize:vertical;}
-    button{
-      padding:10px 12px; border-radius:12px; border:0; cursor:pointer; font-weight:900;
-      background:var(--accent); color:#fff;
+
+    a{ color:inherit; }
+
+    .appHeader{
+      position:sticky;
+      top:0;
+      z-index:10;
+      backdrop-filter: blur(10px);
+      background: rgba(10, 14, 30, .72);
+      border-bottom:1px solid var(--line);
     }
-    button.ghost{background:var(--soft); color:var(--txt); border:1px solid var(--line);}
-    button.danger{background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca;}
-    .pill{background:var(--soft); border-radius:14px; padding:12px;}
-    .pill b{display:block; font-size:12px; color:var(--muted); margin-bottom:6px;}
-    .pill span{font-size:18px; font-weight:950;}
-    .sumgrid{
-      display:grid; gap:10px;
-      grid-template-columns: 1fr 1fr 1.2fr 1fr 1fr 1.2fr;
+
+    .headerInner{
+      max-width:1100px;
+      margin:0 auto;
+      padding:12px 14px;
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:space-between;
+    }
+
+    .brand{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      min-width: 220px;
+    }
+    .brandTitle{
+      font-weight:800;
+      letter-spacing:.2px;
+      font-size:16px;
+    }
+    .brandSub{
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .navTabs{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .navBtn{
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:700;
+      box-shadow: 0 6px 16px rgba(0,0,0,.25);
+      transition: .12s transform ease, .12s background ease, .12s border ease;
+      white-space:nowrap;
+    }
+    .navBtn:hover{ transform: translateY(-1px); }
+    .navBtn.active{
+      background: linear-gradient(180deg, rgba(45,212,191,.25), rgba(45,212,191,.08));
+      border-color: rgba(45,212,191,.35);
+    }
+
+    main{
+      max-width:1100px;
+      margin:0 auto;
+      padding:18px 14px 40px;
+    }
+
+    .page{ display:none; }
+    .page.active{ display:block; }
+
+    /* ======= 상단 요약 영역 ======= */
+    .summaryWrap{
+      position:relative;
+      padding-right: 260px; /* 우측 연총합계 박스 자리 확보 */
+    }
+
+    .summaryGrid{
+      display:grid;
+      grid-template-columns: 2.1fr 1.4fr 2.1fr 1.2fr 1.2fr;
+      gap:12px;
       align-items:stretch;
     }
-    .sumcard{padding:12px; border:1px solid var(--line); border-radius:16px; background:var(--card);}
-    .sumtitle{font-size:12px; color:var(--muted); font-weight:900; margin-bottom:6px;}
-    .sumval{font-size:18px; font-weight:950;}
-    .sumval.ok{color:#065f46}
-    .sumval.bad{color:#7c2d12}
-    .stack2{display:flex; flex-direction:column; gap:8px;}
-    .miniRow{display:flex; justify-content:space-between; gap:10px; align-items:center;}
-    .miniRow .k{font-size:12px; color:var(--muted); font-weight:900;}
-    .miniRow .v{font-size:15px; font-weight:950;}
-    .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:900;}
-    .b-inc{background:#d1fae5; color:#065f46;}
-    .b-exp{background:#ffedd5; color:#7c2d12;}
-    .tableWrap{overflow:auto; border:1px solid var(--line); border-radius:14px;}
-    table{width:100%; border-collapse:collapse; background:#fff;}
-    th,td{padding:10px 8px; border-bottom:1px solid var(--line); font-size:13px; text-align:left; vertical-align:top;}
-    th{color:var(--muted); font-weight:900;}
-    td.right, th.right{text-align:right;}
-    .bar{height:10px; background:var(--soft); border-radius:999px; overflow:hidden;}
-    .bar>div{height:100%; background:var(--accent);}
-    .kpi{display:flex; justify-content:space-between; gap:10px; align-items:baseline;}
-    .kpi .pct{font-weight:950;}
-    .kpi .amt{color:var(--muted); font-size:12px;}
-    .notice{font-size:12px; color:var(--muted); margin-top:8px;}
-    @media (max-width: 900px){
-      .sumgrid{grid-template-columns:1fr 1fr;}
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: var(--shadow);
+      min-height: 96px;
+    }
+
+    .field{
+      padding:6px 0;
+      border-top:1px dashed rgba(255,255,255,.10);
+    }
+    .field:first-child{ border-top:none; padding-top:0; }
+
+    .label{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+    .value{
+      font-size:18px;
+      font-weight:900;
+      margin-top:6px;
+    }
+
+    .income{ color: var(--good); }
+    .expense{ color: var(--bad); }
+
+    .dateCard .dateRow{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin-top:8px;
+    }
+    .miniBtn{
+      border:1px solid var(--line);
+      background: var(--btn);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:800;
+    }
+    .miniBtn:hover{ background: var(--btn2); }
+
+    input[type="date"], input[type="month"], input[type="number"], input[type="text"], select{
+      width:100%;
+      border:1px solid var(--line);
+      background: rgba(10, 14, 30, .45);
+      color:var(--text);
+      padding:10px 10px;
+      border-radius:12px;
+      outline:none;
+      font-weight:700;
+    }
+
+    .datePretty{
+      margin-top:10px;
+      color: var(--muted);
+      font-weight:800;
+      font-size:12px;
+    }
+
+    /* 연총합계(요구사항 1: 제일 상단 오른쪽) */
+    .yearBox{
+      position:absolute;
+      top:0;
+      right:0;
+      width: 240px;
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: var(--shadow);
+    }
+
+    /* 3줄 간격 (요구사항 7,16) */
+    .spacer3{ height: 42px; }
+
+    /* ======= 세부 항목 ======= */
+    h2{
+      margin:0 0 12px;
+      font-size:18px;
+      letter-spacing:.2px;
+    }
+    h3{
+      margin:0 0 10px;
+      font-size:14px;
+      color: var(--muted);
+      font-weight:900;
+      letter-spacing:.2px;
+    }
+
+    .sectionCard{
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: var(--shadow);
+    }
+
+    .formGrid{
+      display:grid;
+      grid-template-columns: 1.2fr 1fr 1.1fr 1fr 1.6fr auto;
+      gap:10px;
+      align-items:end;
+    }
+
+    .primaryBtn{
+      border:1px solid rgba(45,212,191,.35);
+      background: linear-gradient(180deg, rgba(45,212,191,.25), rgba(45,212,191,.08));
+      color: var(--text);
+      padding:10px 14px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .dangerBtn{
+      border:1px solid rgba(251,113,133,.35);
+      background: linear-gradient(180deg, rgba(251,113,133,.18), rgba(251,113,133,.06));
+      color: var(--text);
+      padding:8px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:900;
+      white-space:nowrap;
+    }
+
+    .tabRow{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin:14px 0 10px;
+    }
+    .tabBtn{
+      border:1px solid var(--line);
+      background: var(--btn);
+      color: var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:900;
+      min-width: 72px;
+      text-align:center;
+    }
+    .tabBtn.active{
+      background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.05));
+      border-color: rgba(255,255,255,.22);
+    }
+
+    .filterRow{
+      display:grid;
+      grid-template-columns: 1.4fr 1.4fr 1fr 1fr;
+      gap:10px;
+      align-items:end;
+      margin-bottom: 10px;
+    }
+
+    .filterItem small{
+      display:block;
+      color:var(--muted);
+      font-weight:800;
+      margin:0 0 6px;
+    }
+
+    .hide{ display:none !important; }
+
+    .chipRow{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin: 10px 0 0;
+    }
+    .chip{
+      border:1px solid var(--line);
+      background: var(--chip);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:999px;
+      font-weight:900;
+      cursor:pointer;
+      font-size:12px;
+      opacity:.92;
+    }
+    .chip.active{
+      border-color: rgba(45,212,191,.45);
+      box-shadow: 0 0 0 2px rgba(45,212,191,.12) inset;
+      opacity:1;
+    }
+
+    .detailGrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      margin-top: 12px;
+    }
+
+    .panel{
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: var(--shadow);
+      overflow:auto;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+    }
+    thead th{
+      text-align:left;
+      color:var(--muted);
+      font-weight:900;
+      padding:10px 8px;
+      border-bottom:1px solid var(--line);
+      white-space:nowrap;
+    }
+    tbody td{
+      padding:10px 8px;
+      border-bottom:1px dashed rgba(255,255,255,.10);
+      vertical-align:top;
+    }
+    .right{ text-align:right; }
+    .center{ text-align:center; }
+
+    .badge{
+      display:inline-block;
+      padding:3px 8px;
+      border-radius:999px;
+      font-weight:900;
+      font-size:11px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      white-space:nowrap;
+    }
+    .badge.income{ border-color: rgba(45,212,191,.35); background: rgba(45,212,191,.12); }
+    .badge.expense{ border-color: rgba(251,113,133,.35); background: rgba(251,113,133,.10); }
+
+    /* ======= 순위 페이지 ======= */
+    .rankRow{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin: 12px 0 10px;
+    }
+    .barWrap{
+      height:10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      overflow:hidden;
+    }
+    .bar{
+      height:100%;
+      width:0%;
+      background: linear-gradient(90deg, rgba(45,212,191,.85), rgba(59,130,246,.75));
+    }
+    .bar.expense{
+      background: linear-gradient(90deg, rgba(251,113,133,.85), rgba(245,158,11,.75));
+    }
+
+    .note{
+      color: var(--muted);
+      font-size:12px;
+      font-weight:800;
+      margin-top: 8px;
+    }
+
+    /* ======= 반응형 ======= */
+    @media (max-width: 960px){
+      .summaryWrap{ padding-right:0; }
+      .yearBox{ position:static; width:auto; margin-top:12px; }
+      .summaryGrid{ grid-template-columns: 1fr; }
+      .detailGrid{ grid-template-columns: 1fr; }
+      .formGrid{ grid-template-columns: 1fr 1fr; }
+      .filterRow{ grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
+
 <body>
-<div class="wrap">
-  <div class="topbar">
-    <div class="tabs">
-      <button class="tab active" id="tabMain">메인</button>
-      <button class="tab" id="tabRank">수익과 지출항목 순위</button>
+<header class="appHeader">
+  <div class="headerInner">
+    <div class="brand">
+      <div class="brandTitle">Offline Ledger</div>
+      <div class="brandSub">데이터는 이 기기(브라우저)에만 저장됩니다 (localStorage)</div>
     </div>
-    <div class="muted" id="saveHint">오프라인 저장(localStorage)</div>
+
+    <nav class="navTabs" aria-label="페이지 이동">
+      <button class="navBtn active" id="nav-ledger" type="button">가계부</button>
+      <button class="navBtn" id="nav-rank" type="button">수익과 지출항목 순위</button>
+    </nav>
   </div>
+</header>
 
-  <!-- MAIN PAGE -->
-  <div id="pageMain" class="grid" style="gap:10px;">
-    <div class="card">
-      <div class="row" style="align-items:flex-end; justify-content:space-between;">
-        <div>
-          <div class="h2">상단 합계</div>
-          <div class="muted">기준 날짜: <b id="baseDateLabel"></b> (이 날짜를 기준으로 일/주/월/연 합계를 계산)</div>
-        </div>
-        <div style="min-width:220px;">
-          <label>기준 날짜</label>
-          <input id="baseDate" type="date" />
-        </div>
-      </div>
-
-      <!-- 요구 배치: (1)일수익 (2)일지출 (3)주수익/주지출 (4)월수익 (5)월지출 (오른쪽 끝)연수익/연지출 -->
-      <div class="sumgrid" style="margin-top:10px;">
-        <div class="sumcard">
-          <div class="sumtitle">일총수익합계</div>
-          <div class="sumval ok" id="sumDayInc">0원</div>
-        </div>
-        <div class="sumcard">
-          <div class="sumtitle">일총지출합계</div>
-          <div class="sumval bad" id="sumDayExp">0원</div>
-        </div>
-
-        <div class="sumcard">
-          <div class="sumtitle">주총수익합계 / 주총지출합계</div>
-          <div class="stack2">
-            <div class="miniRow"><span class="k">주총수익합계</span><span class="v" id="sumWeekInc">0원</span></div>
-            <div class="miniRow"><span class="k">주총지출합계</span><span class="v" id="sumWeekExp">0원</span></div>
+<main>
+  <!-- ================== 1) 가계부 페이지 ================== -->
+  <section id="page-ledger" class="page active">
+    <!-- 상단 요약 (요구사항 1~6) -->
+    <div class="summaryWrap">
+      <div class="summaryGrid">
+        <!-- (요구사항 2) 제일 상단 왼쪽: 일총수익/일총지출 -->
+        <div class="card">
+          <div class="field">
+            <div class="label">일총수익합계</div>
+            <div class="value income" id="sumDayIncome">0원</div>
+          </div>
+          <div class="field">
+            <div class="label">일총지출합계</div>
+            <div class="value expense" id="sumDayExpense">0원</div>
           </div>
         </div>
 
-        <div class="sumcard">
-          <div class="sumtitle">월총수익합계</div>
-          <div class="sumval ok" id="sumMonthInc">0원</div>
-        </div>
-        <div class="sumcard">
-          <div class="sumtitle">월총지출합계</div>
-          <div class="sumval bad" id="sumMonthExp">0원</div>
+        <!-- 날짜 (요구사항 6: 시작값 2026.01.01 목) -->
+        <div class="card dateCard">
+          <div class="label">날짜</div>
+          <div class="dateRow">
+            <button class="miniBtn" id="btnPrevDay" type="button" aria-label="전날">◀</button>
+            <input id="selectedDate" type="date" />
+            <button class="miniBtn" id="btnNextDay" type="button" aria-label="다음날">▶</button>
+          </div>
+          <div class="datePretty" id="selectedDatePretty">2026.01.01 목</div>
+          <div class="note">주 기준: 월~일</div>
         </div>
 
-        <div class="sumcard">
-          <div class="sumtitle">연총수익합계 / 연총지출합계</div>
-          <div class="stack2">
-            <div class="miniRow"><span class="k">연총수익합계</span><span class="v" id="sumYearInc">0원</span></div>
-            <div class="miniRow"><span class="k">연총지출합계</span><span class="v" id="sumYearExp">0원</span></div>
+        <!-- (요구사항 3) 왼쪽에서부터 3번째: 주총수익/주총지출 -->
+        <div class="card">
+          <div class="field">
+            <div class="label">주총수익합계</div>
+            <div class="value income" id="sumWeekIncome">0원</div>
+          </div>
+          <div class="field">
+            <div class="label">주총지출합계</div>
+            <div class="value expense" id="sumWeekExpense">0원</div>
+          </div>
+        </div>
+
+        <!-- (요구사항 4) 4번째: 월총수익 -->
+        <div class="card">
+          <div class="field">
+            <div class="label">월총수익합계</div>
+            <div class="value income" id="sumMonthIncome">0원</div>
+          </div>
+        </div>
+
+        <!-- (요구사항 4) 5번째: 월총지출 -->
+        <div class="card">
+          <div class="field">
+            <div class="label">월총지출합계</div>
+            <div class="value expense" id="sumMonthExpense">0원</div>
           </div>
         </div>
       </div>
+
+      <!-- (요구사항 1) 제일 상단 오른쪽: 연총수익/연총지출 -->
+      <aside class="yearBox" aria-label="연간 합계">
+        <div class="field">
+          <div class="label">연총수익합계</div>
+          <div class="value income" id="sumYearIncome">0원</div>
+        </div>
+        <div class="field">
+          <div class="label">연총지출합계</div>
+          <div class="value expense" id="sumYearExpense">0원</div>
+        </div>
+      </aside>
     </div>
 
-    <div class="divider3"></div>
+    <!-- (요구사항 7) 3줄 건너띄기 -->
+    <div class="spacer3" aria-hidden="true"></div>
 
-    <div class="card">
-      <div class="h2">세부 항목</div>
+    <!-- 세부 항목 (요구사항 7~11) -->
+    <section>
+      <h2>세부 항목</h2>
 
-      <div class="grid grid-3">
-        <div>
-          <label>구분</label>
-          <select id="type">
-            <option value="income">수익</option>
-            <option value="expense">지출</option>
+      <div class="sectionCard">
+        <h3>내역 추가 (카테고리 + 메모 포함)</h3>
+
+        <form id="txForm">
+          <div class="formGrid">
+            <label>
+              <span class="label">날짜</span>
+              <input id="txDate" type="date" />
+            </label>
+
+            <label>
+              <span class="label">구분</span>
+              <select id="txType">
+                <option value="expense">지출</option>
+                <option value="income">수익</option>
+              </select>
+            </label>
+
+            <label>
+              <span class="label">항목(하위필드)</span>
+              <select id="txCategory"></select>
+            </label>
+
+            <label>
+              <span class="label">금액(원)</span>
+              <input id="txAmount" type="number" min="0" step="1" placeholder="예: 12000" />
+            </label>
+
+            <label>
+              <span class="label">메모</span>
+              <input id="txMemo" type="text" placeholder="예: 점심 / 월급 / 보험료" />
+            </label>
+
+            <button class="primaryBtn" type="submit">추가</button>
+          </div>
+          <div class="note">* 저장은 자동이며, 삭제는 내역 표에서 가능합니다.</div>
+        </form>
+
+        <!-- (요구사항 7,8,11) 일/주/월/년도 세부 탭 -->
+        <div class="tabRow" role="tablist" aria-label="세부 항목 기간 탭">
+          <button class="tabBtn active" type="button" data-period="day">일</button>
+          <button class="tabBtn" type="button" data-period="week">주</button>
+          <button class="tabBtn" type="button" data-period="month">월</button>
+          <button class="tabBtn" type="button" data-period="year">년도</button>
+        </div>
+
+        <!-- (요구사항 11) 필터: 일/주/월/년도 + 카테고리 + 구분 -->
+        <div class="filterRow" aria-label="세부 항목 필터">
+          <div class="filterItem" id="filterDayWrap">
+            <small>세부날짜(일)</small>
+            <input id="detailDay" type="date" />
+          </div>
+
+          <div class="filterItem hide" id="filterWeekWrap">
+            <small>세부날짜(주)</small>
+            <input id="detailWeek" type="date" />
+          </div>
+
+          <div class="filterItem hide" id="filterMonthWrap">
+            <small>세부날짜(월)</small>
+            <input id="detailMonth" type="month" />
+          </div>
+
+          <div class="filterItem hide" id="filterYearWrap">
+            <small>세부날짜(년도)</small>
+            <input id="detailYear" type="number" min="2026" step="1" />
+          </div>
+
+          <div class="filterItem">
+            <small>항목(하위필드) 필터</small>
+            <select id="detailCategory"></select>
+          </div>
+
+          <div class="filterItem">
+            <small>구분 필터</small>
+            <select id="detailType">
+              <option value="all">전체</option>
+              <option value="income">수익</option>
+              <option value="expense">지출</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 카테고리 칩(초보 편의) -->
+        <div class="chipRow" id="categoryChips" aria-label="카테고리 빠른 선택"></div>
+      </div>
+
+      <div class="detailGrid">
+        <!-- (요구사항 11) 세부날짜별 합계 -->
+        <div class="panel">
+          <h3>세부날짜별 합계 (수익/지출)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>세부날짜</th>
+                <th class="right">수익</th>
+                <th class="right">지출</th>
+              </tr>
+            </thead>
+            <tbody id="bucketBody">
+              <tr><td colspan="3" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 내역 -->
+        <div class="panel">
+          <h3>내역 (날짜 + 항목 + 메모)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>구분</th>
+                <th>항목</th>
+                <th class="right">금액</th>
+                <th>메모</th>
+                <th class="center">삭제</th>
+              </tr>
+            </thead>
+            <tbody id="txBody">
+              <tr><td colspan="6" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 카테고리별 합계 -->
+      <div class="panel" style="margin-top:12px;">
+        <h3>항목(하위필드)별 합계 (수익/지출)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>항목</th>
+              <th class="right">수익합계</th>
+              <th class="right">지출합계</th>
+            </tr>
+          </thead>
+          <tbody id="catSumBody">
+            <tr><td colspan="3" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- ================== 2) 순위 페이지 ================== -->
+  <section id="page-rank" class="page">
+    <h2>수익과 지출항목 순위</h2>
+
+    <!-- (요구사항 15,17) 필터 -->
+    <div class="sectionCard">
+      <h3>필터 (일 / 주 / 월 / 년도)</h3>
+
+      <div class="rankRow">
+        <label style="min-width:160px;">
+          <span class="label">기간</span>
+          <select id="rankPeriod">
+            <option value="day">일</option>
+            <option value="week">주</option>
+            <option value="month">월</option>
+            <option value="year">년도</option>
           </select>
-        </div>
+        </label>
 
-        <div>
-          <label>세부날짜</label>
-          <input id="date" type="date" />
-          <div class="notice">표시 형식은 저장 후 자동으로 <b>YYYY.MM.DD (요일)</b>로 보여줌</div>
-        </div>
+        <label id="rankDayWrap" style="min-width:220px;">
+          <span class="label">세부날짜(일)</span>
+          <input id="rankDay" type="date" />
+        </label>
 
-        <div>
-          <label>하위필드(카테고리)</label>
-          <select id="category"></select>
-        </div>
+        <label id="rankWeekWrap" class="hide" style="min-width:220px;">
+          <span class="label">세부날짜(주)</span>
+          <input id="rankWeek" type="date" />
+        </label>
+
+        <label id="rankMonthWrap" class="hide" style="min-width:220px;">
+          <span class="label">세부날짜(월)</span>
+          <input id="rankMonth" type="month" />
+        </label>
+
+        <label id="rankYearWrap" class="hide" style="min-width:160px;">
+          <span class="label">세부날짜(년도)</span>
+          <input id="rankYear" type="number" min="2026" step="1" />
+        </label>
       </div>
 
-      <div class="grid grid-2" style="margin-top:10px;">
-        <div>
-          <label id="amtLabel">금액</label>
-          <input id="amount" type="number" inputmode="numeric" placeholder="예: 50000" />
-        </div>
-        <div>
-          <label>메모</label>
-          <textarea id="memo" placeholder="세부내용 메모"></textarea>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top:10px;">
-        <button id="addBtn">추가</button>
-        <button class="ghost" id="resetBtn">입력 초기화</button>
-        <button class="ghost" id="exportBtn">CSV 내보내기</button>
-        <button class="danger" id="clearBtn">전체 삭제</button>
-      </div>
+      <div class="note">* 선택한 기간 안에서 “항목별 비율(%) + 합계”를 표시합니다.</div>
     </div>
 
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:flex-end;">
-        <div>
-          <div class="h2">내역</div>
-          <div class="muted" id="count"></div>
-        </div>
-        <div class="row">
-          <div style="min-width:120px;">
-            <label>세부날짜 필터</label>
-            <select id="periodFilter">
-              <option value="day">일</option>
-              <option value="week">주</option>
-              <option value="month">월</option>
-              <option value="year">년도</option>
-            </select>
-          </div>
-          <div style="min-width:150px;">
-            <label>카테고리 필터</label>
-            <select id="catFilter"></select>
-          </div>
-          <div style="min-width:120px;">
-            <label>정렬</label>
-            <select id="sort">
-              <option value="date_desc">날짜 ↓</option>
-              <option value="date_asc">날짜 ↑</option>
-              <option value="amt_desc">금액 ↓</option>
-              <option value="amt_asc">금액 ↑</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="tableWrap" style="margin-top:10px;">
-        <table>
-          <thead>
+    <!-- (요구사항 13~15) 수익 항목 순위 -->
+    <div class="panel" style="margin-top:12px;">
+      <h3>수익항목 순위 및 현황</h3>
+      <table>
+        <thead>
           <tr>
-            <th style="width:84px;">구분</th>
-            <th style="width:150px;">날짜</th>
-            <th style="width:120px;">카테고리</th>
-            <th>메모</th>
-            <th class="right" style="width:120px;">금액</th>
-            <th class="right" style="width:80px;">삭제</th>
+            <th class="center" style="width:56px;">순위</th>
+            <th>항목</th>
+            <th class="right">수익합계</th>
+            <th style="width:260px;">비율(%)</th>
           </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-
-      <div class="notice">기준 날짜는 <b>2026.01.01(목)</b>부터 시작하도록 기본 세팅되어 있어. 필요하면 기준 날짜를 바꿔서 일/주/월/연 집계를 바로 바꿀 수 있음.</div>
+        </thead>
+        <tbody id="incomeRankBody">
+          <tr><td colspan="4" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>
+        </tbody>
+      </table>
     </div>
-  </div>
 
-  <!-- RANK PAGE -->
-  <div id="pageRank" class="grid" style="gap:10px; display:none;">
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:flex-end;">
-        <div>
-          <div class="h2">수익항목 순위 및 현황</div>
-          <div class="muted">선택한 기간(일/주/월/년도)에서 카테고리별 수익 합계와 비율(%)</div>
-        </div>
-        <div class="row">
-          <div style="min-width:120px;">
-            <label>기간</label>
-            <select id="rankPeriod">
-              <option value="day">일</option>
-              <option value="week">주</option>
-              <option value="month">월</option>
-              <option value="year">년도</option>
-            </select>
-          </div>
-          <div style="min-width:220px;">
-            <label>기준 날짜</label>
-            <input id="rankBaseDate" type="date" />
-          </div>
-        </div>
-      </div>
+    <!-- (요구사항 16) 3줄 건너띄기 -->
+    <div class="spacer3" aria-hidden="true"></div>
 
-      <div class="tableWrap" style="margin-top:10px;">
-        <table>
-          <thead>
+    <!-- (요구사항 16~18) 지출 항목 순위 -->
+    <div class="panel">
+      <h3>지출항목 순위 및 현황</h3>
+      <table>
+        <thead>
           <tr>
-            <th style="width:56px;">순위</th>
-            <th>카테고리</th>
-            <th class="right" style="width:120px;">수익 합계</th>
-            <th class="right" style="width:90px;">비율</th>
-            <th style="width:220px;">그래프</th>
+            <th class="center" style="width:56px;">순위</th>
+            <th>항목</th>
+            <th class="right">지출합계</th>
+            <th style="width:260px;">비율(%)</th>
           </tr>
-          </thead>
-          <tbody id="incomeRankRows"></tbody>
-        </table>
-      </div>
+        </thead>
+        <tbody id="expenseRankBody">
+          <tr><td colspan="4" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="divider3"></div>
-
-    <div class="card">
-      <div class="h2">지출항목 순위 및 현황</div>
-      <div class="muted">선택한 기간(일/주/월/년도)에서 카테고리별 지출 합계와 비율(%)</div>
-
-      <div class="tableWrap" style="margin-top:10px;">
-        <table>
-          <thead>
-          <tr>
-            <th style="width:56px;">순위</th>
-            <th>카테고리</th>
-            <th class="right" style="width:120px;">지출 합계</th>
-            <th class="right" style="width:90px;">비율</th>
-            <th style="width:220px;">그래프</th>
-          </tr>
-          </thead>
-          <tbody id="expenseRankRows"></tbody>
-        </table>
-      </div>
+    <div class="note" style="margin-top:12px;">
+      팁: 데이터가 쌓이면 “순위”가 자동으로 바뀝니다.
     </div>
-  </div>
-</div>
+  </section>
+</main>
 
 <script>
-(() => {
-  const KEY = "offline_ledger_v2";
+  // =========================
+  // 0) 기본 설정 / 데이터
+  // =========================
+  const START_DATE = "2026-01-01"; // 요구사항 6
+  const STORAGE_KEY = "offline_ledger_v1";
 
   const CATEGORIES = [
-    "생활","문화/여가","건강/의료","뷰티","적금","주식","대출","교통","선물","용돈","보험","통신","교육","간식","외식","기타","급여"
-  ];
+    "생활","문화/여가","건강/의료","뷰티","적금","주식","대출","교통",
+    "선물","용돈","보험","통신","교육","간식","외식","기타","급여"
+  ]; // 요구사항 9
 
-  const $ = (id) => document.getElementById(id);
+  const WEEKDAY_KO = ["일","월","화","수","목","금","토"];
 
-  const tabMain = $("tabMain");
-  const tabRank = $("tabRank");
-  const pageMain = $("pageMain");
-  const pageRank = $("pageRank");
+  let transactions = loadTx();
+  let selectedDate = START_DATE;         // 상단 날짜(기본)
+  let detailPeriod = "day";              // 세부 탭: day/week/month/year
+  let detailAnchor = START_DATE;         // 세부 필터 기준값
+  let detailCategory = "all";            // 세부 카테고리 필터
+  let detailType = "all";                // 세부 구분 필터
 
-  const baseDate = $("baseDate");
-  const baseDateLabel = $("baseDateLabel");
+  let rankPeriod = "day";                // 순위 필터 기간
+  let rankAnchor = START_DATE;           // 순위 기준값
 
-  const typeEl = $("type");
-  const dateEl = $("date");
-  const catEl  = $("category");
-  const amtEl  = $("amount");
-  const memoEl = $("memo");
-  const amtLabel = $("amtLabel");
-
-  const periodFilter = $("periodFilter");
-  const catFilter = $("catFilter");
-  const sortEl = $("sort");
-
-  const rowsEl = $("rows");
-  const countEl = $("count");
-
-  const addBtn = $("addBtn");
-  const resetBtn = $("resetBtn");
-  const exportBtn = $("exportBtn");
-  const clearBtn = $("clearBtn");
-
-  const rankPeriod = $("rankPeriod");
-  const rankBaseDate = $("rankBaseDate");
-  const incomeRankRows = $("incomeRankRows");
-  const expenseRankRows = $("expenseRankRows");
-
+  // =========================
+  // 1) 유틸
+  // =========================
   function pad2(n){ return String(n).padStart(2,"0"); }
 
-  function isoToday(){
-    const d = new Date();
-    const tzOff = d.getTimezoneOffset() * 60000;
-    return new Date(d - tzOff).toISOString().slice(0,10);
+  function fmtWon(n){
+    const v = Math.round(Number(n) || 0);
+    return v.toLocaleString("ko-KR") + "원";
   }
 
-  // 기준 시작일: 2026-01-01 (목)
-  const DEFAULT_BASE_ISO = "2026-01-01";
-
-  function koDow(d){
-    const names = ["일","월","화","수","목","금","토"];
-    return names[d.getDay()];
+  function isoToPrettyDate(iso){
+    const d = new Date(iso + "T00:00:00");
+    const y = d.getFullYear();
+    const m = pad2(d.getMonth()+1);
+    const day = pad2(d.getDate());
+    const w = WEEKDAY_KO[d.getDay()];
+    return `${y}.${m}.${day} ${w}`;
   }
 
-  function fmtKDate(iso){
-    // iso: YYYY-MM-DD
-    const [y,m,dd] = iso.split("-").map(x=>parseInt(x,10));
-    const d = new Date(y, m-1, dd);
-    return `${y}.${pad2(m)}.${pad2(dd)} ${koDow(d)}`;
+  function isoToPrettyYM(ym){
+    // ym: YYYY-MM
+    const [y,m] = ym.split("-");
+    return `${y}.${m}`;
   }
 
-  function fmtKRW(n){
-    const x = Number(n || 0);
-    return x.toLocaleString("ko-KR") + "원";
+  function addDays(iso, days){
+    const d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0,10);
   }
 
-  function load(){
+  // 주 시작(월요일) 계산
+  function weekStart(iso){
+    const d = new Date(iso + "T00:00:00");
+    const day = d.getDay(); // 0:일 1:월...
+    const diff = (day === 0) ? -6 : (1 - day);
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0,10);
+  }
+
+  function getRange(period, anchor){
+    // 반환: {start, end} (end는 "미포함")
+    if(period === "day"){
+      return { start: anchor, end: addDays(anchor, 1) };
+    }
+    if(period === "week"){
+      const start = weekStart(anchor);
+      return { start, end: addDays(start, 7) };
+    }
+    if(period === "month"){
+      // anchor: YYYY-MM
+      const start = anchor + "-01";
+      const d = new Date(start + "T00:00:00");
+      d.setMonth(d.getMonth()+1);
+      const end = d.toISOString().slice(0,10);
+      return { start, end };
+    }
+    // year
+    const start = anchor + "-01-01"; // anchor: YYYY
+    const end = (Number(anchor) + 1) + "-01-01";
+    return { start, end };
+  }
+
+  function inRange(tx, start, end){
+    return tx.date >= start && tx.date < end;
+  }
+
+  function sumTx(list){
+    let income = 0, expense = 0;
+    for(const t of list){
+      if(t.type === "income") income += t.amount;
+      else expense += t.amount;
+    }
+    return { income, expense };
+  }
+
+  function safeParseAmount(v){
+    const n = Number(v);
+    if(!isFinite(n) || n < 0) return null;
+    return Math.round(n);
+  }
+
+  // =========================
+  // 2) 저장/불러오기
+  // =========================
+  function loadTx(){
     try{
-      const raw = localStorage.getItem(KEY);
-      return raw ? JSON.parse(raw) : [];
-    }catch{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return [];
+      const data = JSON.parse(raw);
+      if(!Array.isArray(data)) return [];
+      return data.filter(t => t && typeof t.id==="string" && typeof t.date==="string" &&
+        (t.type==="income" || t.type==="expense") &&
+        typeof t.category==="string" && typeof t.amount==="number");
+    }catch(e){
       return [];
     }
   }
 
-  function save(items){
-    localStorage.setItem(KEY, JSON.stringify(items));
+  function saveTx(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
   }
 
-  function startOfWeek(d){
-    // 주 시작: 월요일(1)
-    const day = d.getDay(); // 0=일
-    const diff = (day === 0 ? -6 : 1 - day);
-    const x = new Date(d);
-    x.setDate(d.getDate() + diff);
-    x.setHours(0,0,0,0);
-    return x;
+  // =========================
+  // 3) 렌더링(상단 요약)
+  // =========================
+  function updateTopSummary(){
+    document.getElementById("selectedDate").value = selectedDate;
+    document.getElementById("selectedDatePretty").textContent = isoToPrettyDate(selectedDate);
+
+    // 일
+    const rDay = getRange("day", selectedDate);
+    const txDay = transactions.filter(t => inRange(t, rDay.start, rDay.end));
+    const sDay = sumTx(txDay);
+
+    // 주
+    const rWeek = getRange("week", selectedDate);
+    const txWeek = transactions.filter(t => inRange(t, rWeek.start, rWeek.end));
+    const sWeek = sumTx(txWeek);
+
+    // 월
+    const ym = selectedDate.slice(0,7);
+    const rMonth = getRange("month", ym);
+    const txMonth = transactions.filter(t => inRange(t, rMonth.start, rMonth.end));
+    const sMonth = sumTx(txMonth);
+
+    // 연
+    const yy = selectedDate.slice(0,4);
+    const rYear = getRange("year", yy);
+    const txYear = transactions.filter(t => inRange(t, rYear.start, rYear.end));
+    const sYear = sumTx(txYear);
+
+    document.getElementById("sumDayIncome").textContent = fmtWon(sDay.income);
+    document.getElementById("sumDayExpense").textContent = fmtWon(sDay.expense);
+
+    document.getElementById("sumWeekIncome").textContent = fmtWon(sWeek.income);
+    document.getElementById("sumWeekExpense").textContent = fmtWon(sWeek.expense);
+
+    document.getElementById("sumMonthIncome").textContent = fmtWon(sMonth.income);
+    document.getElementById("sumMonthExpense").textContent = fmtWon(sMonth.expense);
+
+    document.getElementById("sumYearIncome").textContent = fmtWon(sYear.income);
+    document.getElementById("sumYearExpense").textContent = fmtWon(sYear.expense);
   }
 
-  function endOfWeek(d){
-    const s = startOfWeek(d);
-    const e = new Date(s);
-    e.setDate(s.getDate()+7);
-    return e; // exclusive
-  }
+  // =========================
+  // 4) 세부항목(요구사항 7~11)
+  // =========================
+  function applyDetailFilterStateToInputs(){
+    // 기간별 입력칸 show/hide
+    document.getElementById("filterDayWrap").classList.toggle("hide", detailPeriod !== "day");
+    document.getElementById("filterWeekWrap").classList.toggle("hide", detailPeriod !== "week");
+    document.getElementById("filterMonthWrap").classList.toggle("hide", detailPeriod !== "month");
+    document.getElementById("filterYearWrap").classList.toggle("hide", detailPeriod !== "year");
 
-  function inRange(iso, start, endExclusive){
-    const t = new Date(iso+"T00:00:00");
-    return t >= start && t < endExclusive;
-  }
-
-  function periodBounds(period, baseIso){
-    const [y,m,dd] = baseIso.split("-").map(x=>parseInt(x,10));
-    const d = new Date(y, m-1, dd);
-    d.setHours(0,0,0,0);
-
-    if(period==="day"){
-      const s = new Date(d);
-      const e = new Date(d); e.setDate(e.getDate()+1);
-      return [s,e];
+    // 값 반영
+    if(detailPeriod === "day"){
+      document.getElementById("detailDay").value = detailAnchor;
+    }else if(detailPeriod === "week"){
+      document.getElementById("detailWeek").value = detailAnchor;
+    }else if(detailPeriod === "month"){
+      document.getElementById("detailMonth").value = detailAnchor; // YYYY-MM
+    }else{
+      document.getElementById("detailYear").value = detailAnchor; // YYYY
     }
-    if(period==="week"){
-      const s = startOfWeek(d);
-      const e = endOfWeek(d);
-      return [s,e];
-    }
-    if(period==="month"){
-      const s = new Date(y, m-1, 1);
-      const e = new Date(y, m, 1);
-      return [s,e];
-    }
-    // year
-    const s = new Date(y, 0, 1);
-    const e = new Date(y+1, 0, 1);
-    return [s,e];
+
+    document.getElementById("detailCategory").value = detailCategory;
+    document.getElementById("detailType").value = detailType;
+
+    // 칩 활성화
+    const chips = document.querySelectorAll("#categoryChips .chip");
+    chips.forEach(ch => {
+      const v = ch.getAttribute("data-val");
+      ch.classList.toggle("active", v === detailCategory);
+    });
   }
 
-  function sumByPeriod(items, baseIso){
-    const [sd,ed] = periodBounds("day", baseIso);
-    const [sw,ew] = periodBounds("week", baseIso);
-    const [sm,em] = periodBounds("month", baseIso);
-    const [sy,ey] = periodBounds("year", baseIso);
+  function getFilteredTxForDetail(){
+    const range = getRange(detailPeriod, detailAnchor);
+    let list = transactions.filter(t => inRange(t, range.start, range.end));
 
-    let dInc=0,dExp=0,wInc=0,wExp=0,mInc=0,mExp=0,yInc=0,yExp=0;
-
-    for(const it of items){
-      const amt = Number(it.amount||0);
-      const isInc = it.type==="income";
-      if(inRange(it.date, sd, ed)) (isInc? dInc:dExp) += amt;
-      if(inRange(it.date, sw, ew)) (isInc? wInc:wExp) += amt;
-      if(inRange(it.date, sm, em)) (isInc? mInc:mExp) += amt;
-      if(inRange(it.date, sy, ey)) (isInc? yInc:yExp) += amt;
+    if(detailCategory !== "all"){
+      list = list.filter(t => t.category === detailCategory);
     }
-    return {dInc,dExp,wInc,wExp,mInc,mExp,yInc,yExp};
-  }
+    if(detailType !== "all"){
+      list = list.filter(t => t.type === detailType);
+    }
 
-  function applyAmtLabel(){
-    amtLabel.textContent = (typeEl.value==="income") ? "수익금" : "지출금액";
-  }
-
-  function getFilteredView(items){
-    const baseIso = baseDate.value;
-    const period = periodFilter.value;
-    const [s,e] = periodBounds(period, baseIso);
-
-    const cf = catFilter.value;
-
-    let list = items.filter(it => inRange(it.date, s, e));
-    if(cf!=="all") list = list.filter(it => it.category===cf);
-
-    const sort = sortEl.value;
-    const byDate = (a,b)=> (a.date||"").localeCompare(b.date||"");
-    const byAmt  = (a,b)=> (a.amount||0)-(b.amount||0);
-
-    if(sort==="date_asc") list.sort(byDate);
-    if(sort==="date_desc") list.sort((a,b)=>byDate(b,a));
-    if(sort==="amt_asc") list.sort(byAmt);
-    if(sort==="amt_desc") list.sort((a,b)=>byAmt(b,a));
-
+    // 최신 날짜/최근 추가가 위로 오게(원하면 바꿔도 됨)
+    list.sort((a,b) => (b.date.localeCompare(a.date) || b.createdAt - a.createdAt));
     return list;
   }
 
-  function renderMain(){
-    const items = load();
-
-    // base date label
-    baseDateLabel.textContent = fmtKDate(baseDate.value);
-
-    // sums
-    const s = sumByPeriod(items, baseDate.value);
-    $("sumDayInc").textContent = fmtKRW(s.dInc);
-    $("sumDayExp").textContent = fmtKRW(s.dExp);
-    $("sumWeekInc").textContent = fmtKRW(s.wInc);
-    $("sumWeekExp").textContent = fmtKRW(s.wExp);
-    $("sumMonthInc").textContent = fmtKRW(s.mInc);
-    $("sumMonthExp").textContent = fmtKRW(s.mExp);
-    $("sumYearInc").textContent = fmtKRW(s.yInc);
-    $("sumYearExp").textContent = fmtKRW(s.yExp);
-
-    // table
-    const view = getFilteredView(items);
-    countEl.textContent = `저장 ${items.length}건 / 표시 ${view.length}건`;
-
-    rowsEl.innerHTML = "";
-    for(const it of view){
-      const tr = document.createElement("tr");
-
-      const tdType = document.createElement("td");
-      tdType.innerHTML = it.type==="income"
-        ? `<span class="badge b-inc">수익</span>`
-        : `<span class="badge b-exp">지출</span>`;
-
-      const tdDate = document.createElement("td");
-      tdDate.textContent = fmtKDate(it.date);
-
-      const tdCat = document.createElement("td");
-      tdCat.textContent = it.category;
-
-      const tdMemo = document.createElement("td");
-      tdMemo.textContent = it.memo || "";
-
-      const tdAmt = document.createElement("td");
-      tdAmt.className = "right";
-      tdAmt.textContent = fmtKRW(it.amount);
-
-      const tdDel = document.createElement("td");
-      tdDel.className = "right";
-      const b = document.createElement("button");
-      b.className = "danger";
-      b.style.padding = "6px 10px";
-      b.textContent = "삭제";
-      b.onclick = () => {
-        const next = items.filter(x=>x.id!==it.id);
-        save(next);
-        renderAll();
-      };
-      tdDel.appendChild(b);
-
-      tr.appendChild(tdType);
-      tr.appendChild(tdDate);
-      tr.appendChild(tdCat);
-      tr.appendChild(tdMemo);
-      tr.appendChild(tdAmt);
-      tr.appendChild(tdDel);
-
-      rowsEl.appendChild(tr);
-    }
-  }
-
-  function aggByCategory(items, period, baseIso, type){
-    const [s,e] = periodBounds(period, baseIso);
+  function renderBuckets(list){
+    // (요구사항 11) 세부날짜별 수익/지출 합계
+    // - day/week/month: 날짜(YYYY-MM-DD) 단위
+    // - year: 월(YYYY-MM) 단위
     const map = new Map();
-    let total = 0;
 
-    for(const it of items){
-      if(it.type!==type) continue;
-      if(!inRange(it.date, s, e)) continue;
-      const amt = Number(it.amount||0);
-      total += amt;
-      map.set(it.category, (map.get(it.category)||0) + amt);
+    for(const t of list){
+      const key = (detailPeriod === "year") ? t.date.slice(0,7) : t.date; // YYYY-MM or YYYY-MM-DD
+      if(!map.has(key)) map.set(key, { income:0, expense:0 });
+      const bucket = map.get(key);
+      if(t.type === "income") bucket.income += t.amount;
+      else bucket.expense += t.amount;
     }
 
-    const rows = Array.from(map.entries())
-      .map(([cat, amt]) => ({cat, amt}))
-      .sort((a,b)=> b.amt - a.amt);
+    const keys = Array.from(map.keys()).sort(); // 날짜 오름차순
+    const tbody = document.getElementById("bucketBody");
+    tbody.innerHTML = "";
 
-    return {total, rows};
-  }
-
-  function renderRank(){
-    const items = load();
-    const period = rankPeriod.value;
-    const baseIso = rankBaseDate.value;
-
-    const inc = aggByCategory(items, period, baseIso, "income");
-    const exp = aggByCategory(items, period, baseIso, "expense");
-
-    incomeRankRows.innerHTML = "";
-    expenseRankRows.innerHTML = "";
-
-    function renderRankTable(tbody, data, isIncome){
-      const total = data.total || 0;
-
-      // 모든 카테고리 표시(0 포함) 요구를 “총합계 대비 비율” 관점으로 충족:
-      // 실제 입력이 없는 카테고리는 표에 안 나와도 되지만, 요청이 “7번 필드들 관련 총합계”라서
-      // 순위표는 “기록이 있는 항목” 중심 + 필요 시 0항목은 아래에서 추가 가능.
-      const rows = data.rows.slice();
-
-      // 0 항목도 보고 싶다면 아래 주석 해제:
-      // for(const cat of CATEGORIES){
-      //   if(!rows.find(r=>r.cat===cat)) rows.push({cat, amt:0});
-      // }
-
-      const top = rows.length ? rows : [];
-      top.forEach((r, idx)=>{
-        const tr = document.createElement("tr");
-        const pct = total>0 ? (r.amt/total*100) : 0;
-
-        const tdRank = document.createElement("td");
-        tdRank.textContent = String(idx+1);
-
-        const tdCat = document.createElement("td");
-        tdCat.innerHTML = `${r.cat} ${isIncome? `<span class="badge b-inc">수익</span>`:`<span class="badge b-exp">지출</span>`}`;
-
-        const tdAmt = document.createElement("td");
-        tdAmt.className="right";
-        tdAmt.textContent = fmtKRW(r.amt);
-
-        const tdPct = document.createElement("td");
-        tdPct.className="right";
-        tdPct.innerHTML = `<span class="pct">${pct.toFixed(1)}%</span>`;
-
-        const tdBar = document.createElement("td");
-        tdBar.innerHTML = `<div class="bar"><div style="width:${Math.min(100, pct)}%"></div></div>`;
-
-        tr.appendChild(tdRank);
-        tr.appendChild(tdCat);
-        tr.appendChild(tdAmt);
-        tr.appendChild(tdPct);
-        tr.appendChild(tdBar);
-        tbody.appendChild(tr);
-      });
-
-      if(!top.length){
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 5;
-        td.className="muted";
-        td.textContent = "해당 기간에 기록이 없습니다.";
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-      }
+    if(keys.length === 0){
+      tbody.innerHTML = `<tr><td colspan="3" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
+      return;
     }
 
-    renderRankTable(incomeRankRows, inc, true);
-    renderRankTable(expenseRankRows, exp, false);
-  }
+    for(const k of keys){
+      const v = map.get(k);
+      const label = (detailPeriod === "year")
+        ? isoToPrettyYM(k)
+        : isoToPrettyDate(k);
 
-  function renderAll(){
-    renderMain();
-    renderRank();
-  }
-
-  function addItem(){
-    const t = typeEl.value;
-    const date = dateEl.value;
-    const category = catEl.value;
-    const amount = Number(amtEl.value);
-    const memo = memoEl.value.trim();
-
-    if(!date) return alert("날짜를 선택하세요.");
-    if(!category) return alert("카테고리를 선택하세요.");
-    if(!Number.isFinite(amount) || amount<=0) return alert("금액을 0보다 크게 입력하세요.");
-
-    const items = load();
-    items.push({
-      id: crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + "_" + Math.random().toString(16).slice(2),
-      type: t,
-      date,
-      category,
-      amount: Math.floor(amount),
-      memo,
-      createdAt: Date.now()
-    });
-    save(items);
-    amtEl.value="";
-    memoEl.value="";
-    renderAll();
-  }
-
-  function exportCSV(){
-    const items = load();
-    const header = ["구분","날짜(ISO)","날짜(표시)","카테고리","금액","메모"];
-    const rows = items.map(it => [
-      it.type==="income" ? "수익" : "지출",
-      it.date,
-      fmtKDate(it.date),
-      it.category,
-      String(it.amount||0),
-      (it.memo||"").replaceAll('"','""')
-    ]);
-
-    const csv = [header, ...rows]
-      .map(r => r.map(x=> `"${String(x)}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "offline-ledger.csv";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function clearAll(){
-    if(!confirm("정말 전체 삭제할까요?")) return;
-    localStorage.removeItem(KEY);
-    renderAll();
-  }
-
-  function resetForm(){
-    typeEl.value="income";
-    dateEl.value = baseDate.value;
-    catEl.value = CATEGORIES[0];
-    amtEl.value="";
-    memoEl.value="";
-    applyAmtLabel();
-  }
-
-  function setActiveTab(which){
-    if(which==="main"){
-      tabMain.classList.add("active");
-      tabRank.classList.remove("active");
-      pageMain.style.display="grid";
-      pageRank.style.display="none";
-      renderMain();
-    }else{
-      tabRank.classList.add("active");
-      tabMain.classList.remove("active");
-      pageRank.style.display="grid";
-      pageMain.style.display="none";
-      renderRank();
-    }
-  }
-
-  // init selects
-  function initCategories(){
-    catEl.innerHTML = "";
-    for(const c of CATEGORIES){
-      const o = document.createElement("option");
-      o.value = c;
-      o.textContent = c;
-      catEl.appendChild(o);
-    }
-
-    catFilter.innerHTML = "";
-    const all = document.createElement("option");
-    all.value="all"; all.textContent="전체";
-    catFilter.appendChild(all);
-    for(const c of CATEGORIES){
-      const o = document.createElement("option");
-      o.value=c; o.textContent=c;
-      catFilter.appendChild(o);
-    }
-  }
-
-  // events
-  tabMain.addEventListener("click", ()=>setActiveTab("main"));
-  tabRank.addEventListener("click", ()=>setActiveTab("rank"));
-
-  baseDate.addEventListener("change", ()=>{
-    baseDateLabel.textContent = fmtKDate(baseDate.value);
-    dateEl.value = baseDate.value;
-    rankBaseDate.value = baseDate.value;
-    renderAll();
-  });
-
-  rankBaseDate.addEventListener("change", renderRank);
-  rankPeriod.addEventListener("change", renderRank);
-
-  typeEl.addEventListener("change", applyAmtLabel);
-  addBtn.addEventListener("click", addItem);
-  resetBtn.addEventListener("click", resetForm);
-  exportBtn.addEventListener("click", exportCSV);
-  clearBtn.addEventListener("click", clearAll);
-
-  periodFilter.addEventListener("change", renderMain);
-  catFilter.addEventListener("change", renderMain);
-  sortEl.addEventListener("change", renderMain);
-
-  // boot
-  initCategories();
-
-  // base date fixed start
-  baseDate.min = DEFAULT_BASE_ISO;
-  dateEl.min = DEFAULT_BASE_ISO;
-  rankBaseDate.min = DEFAULT_BASE_ISO;
-
-  baseDate.value = DEFAULT_BASE_ISO;
-  rankBaseDate.value = DEFAULT_BASE_ISO;
-  dateEl.value = DEFAULT_BASE_ISO;
-
-  applyAmtLabel();
-  resetForm();
-  renderAll();
-})();
-</script>
-</body>
-</html><!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>오프라인 가계부</title>
-  <style>
-    :root{
-      --bg:#f6f7fb; --card:#fff; --line:#e8ecf3; --txt:#111827; --muted:#6b7280;
-      --accent:#111827; --soft:#f3f4f6;
-      --ok:#10b981; --bad:#f97316; --blue:#2563eb;
-    }
-    *{box-sizing:border-box}
-    body{margin:0; font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif; background:var(--bg); color:var(--txt);}
-    .wrap{max-width:1100px; margin:0 auto; padding:14px;}
-    .topbar{display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px;}
-    .tabs{display:flex; gap:8px; flex-wrap:wrap;}
-    .tab{padding:10px 12px; border:1px solid var(--line); background:var(--card); border-radius:12px; cursor:pointer; font-weight:800;}
-    .tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
-    .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px; box-shadow:0 6px 18px rgba(0,0,0,.05);}
-    .muted{color:var(--muted); font-size:12px;}
-    .row{display:flex; gap:10px; flex-wrap:wrap;}
-    .grid{display:grid; gap:10px;}
-    .grid-2{grid-template-columns:1fr 1fr;}
-    .grid-3{grid-template-columns:1fr 1fr 1fr;}
-    .grid-4{grid-template-columns:1fr 1fr 1fr 1fr;}
-    .divider3{margin:18px 0 0; height:36px;} /* “3줄 건너띄기” 느낌 */
-    .h2{font-size:16px; font-weight:900; margin:0 0 8px;}
-    label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:800;}
-    input,select,textarea{
-      width:100%; padding:10px; border:1px solid var(--line); border-radius:12px; background:#fff; font-size:14px;
-    }
-    textarea{min-height:44px; resize:vertical;}
-    button{
-      padding:10px 12px; border-radius:12px; border:0; cursor:pointer; font-weight:900;
-      background:var(--accent); color:#fff;
-    }
-    button.ghost{background:var(--soft); color:var(--txt); border:1px solid var(--line);}
-    button.danger{background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca;}
-    .pill{background:var(--soft); border-radius:14px; padding:12px;}
-    .pill b{display:block; font-size:12px; color:var(--muted); margin-bottom:6px;}
-    .pill span{font-size:18px; font-weight:950;}
-    .sumgrid{
-      display:grid; gap:10px;
-      grid-template-columns: 1fr 1fr 1.2fr 1fr 1fr 1.2fr;
-      align-items:stretch;
-    }
-    .sumcard{padding:12px; border:1px solid var(--line); border-radius:16px; background:var(--card);}
-    .sumtitle{font-size:12px; color:var(--muted); font-weight:900; margin-bottom:6px;}
-    .sumval{font-size:18px; font-weight:950;}
-    .sumval.ok{color:#065f46}
-    .sumval.bad{color:#7c2d12}
-    .stack2{display:flex; flex-direction:column; gap:8px;}
-    .miniRow{display:flex; justify-content:space-between; gap:10px; align-items:center;}
-    .miniRow .k{font-size:12px; color:var(--muted); font-weight:900;}
-    .miniRow .v{font-size:15px; font-weight:950;}
-    .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:900;}
-    .b-inc{background:#d1fae5; color:#065f46;}
-    .b-exp{background:#ffedd5; color:#7c2d12;}
-    .tableWrap{overflow:auto; border:1px solid var(--line); border-radius:14px;}
-    table{width:100%; border-collapse:collapse; background:#fff;}
-    th,td{padding:10px 8px; border-bottom:1px solid var(--line); font-size:13px; text-align:left; vertical-align:top;}
-    th{color:var(--muted); font-weight:900;}
-    td.right, th.right{text-align:right;}
-    .bar{height:10px; background:var(--soft); border-radius:999px; overflow:hidden;}
-    .bar>div{height:100%; background:var(--accent);}
-    .kpi{display:flex; justify-content:space-between; gap:10px; align-items:baseline;}
-    .kpi .pct{font-weight:950;}
-    .kpi .amt{color:var(--muted); font-size:12px;}
-    .notice{font-size:12px; color:var(--muted); margin-top:8px;}
-    @media (max-width: 900px){
-      .sumgrid{grid-template-columns:1fr 1fr;}
-    }
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <div class="topbar">
-    <div class="tabs">
-      <button class="tab active" id="tabMain">메인</button>
-      <button class="tab" id="tabRank">수익과 지출항목 순위</button>
-    </div>
-    <div class="muted" id="saveHint">오프라인 저장(localStorage)</div>
-  </div>
-
-  <!-- MAIN PAGE -->
-  <div id="pageMain" class="grid" style="gap:10px;">
-    <div class="card">
-      <div class="row" style="align-items:flex-end; justify-content:space-between;">
-        <div>
-          <div class="h2">상단 합계</div>
-          <div class="muted">기준 날짜: <b id="baseDateLabel"></b> (이 날짜를 기준으로 일/주/월/연 합계를 계산)</div>
-        </div>
-        <div style="min-width:220px;">
-          <label>기준 날짜</label>
-          <input id="baseDate" type="date" />
-        </div>
-      </div>
-
-      <!-- 요구 배치: (1)일수익 (2)일지출 (3)주수익/주지출 (4)월수익 (5)월지출 (오른쪽 끝)연수익/연지출 -->
-      <div class="sumgrid" style="margin-top:10px;">
-        <div class="sumcard">
-          <div class="sumtitle">일총수익합계</div>
-          <div class="sumval ok" id="sumDayInc">0원</div>
-        </div>
-        <div class="sumcard">
-          <div class="sumtitle">일총지출합계</div>
-          <div class="sumval bad" id="sumDayExp">0원</div>
-        </div>
-
-        <div class="sumcard">
-          <div class="sumtitle">주총수익합계 / 주총지출합계</div>
-          <div class="stack2">
-            <div class="miniRow"><span class="k">주총수익합계</span><span class="v" id="sumWeekInc">0원</span></div>
-            <div class="miniRow"><span class="k">주총지출합계</span><span class="v" id="sumWeekExp">0원</span></div>
-          </div>
-        </div>
-
-        <div class="sumcard">
-          <div class="sumtitle">월총수익합계</div>
-          <div class="sumval ok" id="sumMonthInc">0원</div>
-        </div>
-        <div class="sumcard">
-          <div class="sumtitle">월총지출합계</div>
-          <div class="sumval bad" id="sumMonthExp">0원</div>
-        </div>
-
-        <div class="sumcard">
-          <div class="sumtitle">연총수익합계 / 연총지출합계</div>
-          <div class="stack2">
-            <div class="miniRow"><span class="k">연총수익합계</span><span class="v" id="sumYearInc">0원</span></div>
-            <div class="miniRow"><span class="k">연총지출합계</span><span class="v" id="sumYearExp">0원</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="divider3"></div>
-
-    <div class="card">
-      <div class="h2">세부 항목</div>
-
-      <div class="grid grid-3">
-        <div>
-          <label>구분</label>
-          <select id="type">
-            <option value="income">수익</option>
-            <option value="expense">지출</option>
-          </select>
-        </div>
-
-        <div>
-          <label>세부날짜</label>
-          <input id="date" type="date" />
-          <div class="notice">표시 형식은 저장 후 자동으로 <b>YYYY.MM.DD (요일)</b>로 보여줌</div>
-        </div>
-
-        <div>
-          <label>하위필드(카테고리)</label>
-          <select id="category"></select>
-        </div>
-      </div>
-
-      <div class="grid grid-2" style="margin-top:10px;">
-        <div>
-          <label id="amtLabel">금액</label>
-          <input id="amount" type="number" inputmode="numeric" placeholder="예: 50000" />
-        </div>
-        <div>
-          <label>메모</label>
-          <textarea id="memo" placeholder="세부내용 메모"></textarea>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top:10px;">
-        <button id="addBtn">추가</button>
-        <button class="ghost" id="resetBtn">입력 초기화</button>
-        <button class="ghost" id="exportBtn">CSV 내보내기</button>
-        <button class="danger" id="clearBtn">전체 삭제</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:flex-end;">
-        <div>
-          <div class="h2">내역</div>
-          <div class="muted" id="count"></div>
-        </div>
-        <div class="row">
-          <div style="min-width:120px;">
-            <label>세부날짜 필터</label>
-            <select id="periodFilter">
-              <option value="day">일</option>
-              <option value="week">주</option>
-              <option value="month">월</option>
-              <option value="year">년도</option>
-            </select>
-          </div>
-          <div style="min-width:150px;">
-            <label>카테고리 필터</label>
-            <select id="catFilter"></select>
-          </div>
-          <div style="min-width:120px;">
-            <label>정렬</label>
-            <select id="sort">
-              <option value="date_desc">날짜 ↓</option>
-              <option value="date_asc">날짜 ↑</option>
-              <option value="amt_desc">금액 ↓</option>
-              <option value="amt_asc">금액 ↑</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="tableWrap" style="margin-top:10px;">
-        <table>
-          <thead>
-          <tr>
-            <th style="width:84px;">구분</th>
-            <th style="width:150px;">날짜</th>
-            <th style="width:120px;">카테고리</th>
-            <th>메모</th>
-            <th class="right" style="width:120px;">금액</th>
-            <th class="right" style="width:80px;">삭제</th>
-          </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-
-      <div class="notice">기준 날짜는 <b>2026.01.01(목)</b>부터 시작하도록 기본 세팅되어 있어. 필요하면 기준 날짜를 바꿔서 일/주/월/연 집계를 바로 바꿀 수 있음.</div>
-    </div>
-  </div>
-
-  <!-- RANK PAGE -->
-  <div id="pageRank" class="grid" style="gap:10px; display:none;">
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:flex-end;">
-        <div>
-          <div class="h2">수익항목 순위 및 현황</div>
-          <div class="muted">선택한 기간(일/주/월/년도)에서 카테고리별 수익 합계와 비율(%)</div>
-        </div>
-        <div class="row">
-          <div style="min-width:120px;">
-            <label>기간</label>
-            <select id="rankPeriod">
-              <option value="day">일</option>
-              <option value="week">주</option>
-              <option value="month">월</option>
-              <option value="year">년도</option>
-            </select>
-          </div>
-          <div style="min-width:220px;">
-            <label>기준 날짜</label>
-            <input id="rankBaseDate" type="date" />
-          </div>
-        </div>
-      </div>
-
-      <div class="tableWrap" style="margin-top:10px;">
-        <table>
-          <thead>
-          <tr>
-            <th style="width:56px;">순위</th>
-            <th>카테고리</th>
-            <th class="right" style="width:120px;">수익 합계</th>
-            <th class="right" style="width:90px;">비율</th>
-            <th style="width:220px;">그래프</th>
-          </tr>
-          </thead>
-          <tbody id="incomeRankRows"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="divider3"></div>
-
-    <div class="card">
-      <div class="h2">지출항목 순위 및 현황</div>
-      <div class="muted">선택한 기간(일/주/월/년도)에서 카테고리별 지출 합계와 비율(%)</div>
-
-      <div class="tableWrap" style="margin-top:10px;">
-        <table>
-          <thead>
-          <tr>
-            <th style="width:56px;">순위</th>
-            <th>카테고리</th>
-            <th class="right" style="width:120px;">지출 합계</th>
-            <th class="right" style="width:90px;">비율</th>
-            <th style="width:220px;">그래프</th>
-          </tr>
-          </thead>
-          <tbody id="expenseRankRows"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-(() => {
-  const KEY = "offline_ledger_v2";
-
-  const CATEGORIES = [
-    "생활","문화/여가","건강/의료","뷰티","적금","주식","대출","교통","선물","용돈","보험","통신","교육","간식","외식","기타","급여"
-  ];
-
-  const $ = (id) => document.getElementById(id);
-
-  const tabMain = $("tabMain");
-  const tabRank = $("tabRank");
-  const pageMain = $("pageMain");
-  const pageRank = $("pageRank");
-
-  const baseDate = $("baseDate");
-  const baseDateLabel = $("baseDateLabel");
-
-  const typeEl = $("type");
-  const dateEl = $("date");
-  const catEl  = $("category");
-  const amtEl  = $("amount");
-  const memoEl = $("memo");
-  const amtLabel = $("amtLabel");
-
-  const periodFilter = $("periodFilter");
-  const catFilter = $("catFilter");
-  const sortEl = $("sort");
-
-  const rowsEl = $("rows");
-  const countEl = $("count");
-
-  const addBtn = $("addBtn");
-  const resetBtn = $("resetBtn");
-  const exportBtn = $("exportBtn");
-  const clearBtn = $("clearBtn");
-
-  const rankPeriod = $("rankPeriod");
-  const rankBaseDate = $("rankBaseDate");
-  const incomeRankRows = $("incomeRankRows");
-  const expenseRankRows = $("expenseRankRows");
-
-  function pad2(n){ return String(n).padStart(2,"0"); }
-
-  function isoToday(){
-    const d = new Date();
-    const tzOff = d.getTimezoneOffset() * 60000;
-    return new Date(d - tzOff).toISOString().slice(0,10);
-  }
-
-  // 기준 시작일: 2026-01-01 (목)
-  const DEFAULT_BASE_ISO = "2026-01-01";
-
-  function koDow(d){
-    const names = ["일","월","화","수","목","금","토"];
-    return names[d.getDay()];
-  }
-
-  function fmtKDate(iso){
-    // iso: YYYY-MM-DD
-    const [y,m,dd] = iso.split("-").map(x=>parseInt(x,10));
-    const d = new Date(y, m-1, dd);
-    return `${y}.${pad2(m)}.${pad2(dd)} ${koDow(d)}`;
-  }
-
-  function fmtKRW(n){
-    const x = Number(n || 0);
-    return x.toLocaleString("ko-KR") + "원";
-  }
-
-  function load(){
-    try{
-      const raw = localStorage.getItem(KEY);
-      return raw ? JSON.parse(raw) : [];
-    }catch{
-      return [];
-    }
-  }
-
-  function save(items){
-    localStorage.setItem(KEY, JSON.stringify(items));
-  }
-
-  function startOfWeek(d){
-    // 주 시작: 월요일(1)
-    const day = d.getDay(); // 0=일
-    const diff = (day === 0 ? -6 : 1 - day);
-    const x = new Date(d);
-    x.setDate(d.getDate() + diff);
-    x.setHours(0,0,0,0);
-    return x;
-  }
-
-  function endOfWeek(d){
-    const s = startOfWeek(d);
-    const e = new Date(s);
-    e.setDate(s.getDate()+7);
-    return e; // exclusive
-  }
-
-  function inRange(iso, start, endExclusive){
-    const t = new Date(iso+"T00:00:00");
-    return t >= start && t < endExclusive;
-  }
-
-  function periodBounds(period, baseIso){
-    const [y,m,dd] = baseIso.split("-").map(x=>parseInt(x,10));
-    const d = new Date(y, m-1, dd);
-    d.setHours(0,0,0,0);
-
-    if(period==="day"){
-      const s = new Date(d);
-      const e = new Date(d); e.setDate(e.getDate()+1);
-      return [s,e];
-    }
-    if(period==="week"){
-      const s = startOfWeek(d);
-      const e = endOfWeek(d);
-      return [s,e];
-    }
-    if(period==="month"){
-      const s = new Date(y, m-1, 1);
-      const e = new Date(y, m, 1);
-      return [s,e];
-    }
-    // year
-    const s = new Date(y, 0, 1);
-    const e = new Date(y+1, 0, 1);
-    return [s,e];
-  }
-
-  function sumByPeriod(items, baseIso){
-    const [sd,ed] = periodBounds("day", baseIso);
-    const [sw,ew] = periodBounds("week", baseIso);
-    const [sm,em] = periodBounds("month", baseIso);
-    const [sy,ey] = periodBounds("year", baseIso);
-
-    let dInc=0,dExp=0,wInc=0,wExp=0,mInc=0,mExp=0,yInc=0,yExp=0;
-
-    for(const it of items){
-      const amt = Number(it.amount||0);
-      const isInc = it.type==="income";
-      if(inRange(it.date, sd, ed)) (isInc? dInc:dExp) += amt;
-      if(inRange(it.date, sw, ew)) (isInc? wInc:wExp) += amt;
-      if(inRange(it.date, sm, em)) (isInc? mInc:mExp) += amt;
-      if(inRange(it.date, sy, ey)) (isInc? yInc:yExp) += amt;
-    }
-    return {dInc,dExp,wInc,wExp,mInc,mExp,yInc,yExp};
-  }
-
-  function applyAmtLabel(){
-    amtLabel.textContent = (typeEl.value==="income") ? "수익금" : "지출금액";
-  }
-
-  function getFilteredView(items){
-    const baseIso = baseDate.value;
-    const period = periodFilter.value;
-    const [s,e] = periodBounds(period, baseIso);
-
-    const cf = catFilter.value;
-
-    let list = items.filter(it => inRange(it.date, s, e));
-    if(cf!=="all") list = list.filter(it => it.category===cf);
-
-    const sort = sortEl.value;
-    const byDate = (a,b)=> (a.date||"").localeCompare(b.date||"");
-    const byAmt  = (a,b)=> (a.amount||0)-(b.amount||0);
-
-    if(sort==="date_asc") list.sort(byDate);
-    if(sort==="date_desc") list.sort((a,b)=>byDate(b,a));
-    if(sort==="amt_asc") list.sort(byAmt);
-    if(sort==="amt_desc") list.sort((a,b)=>byAmt(b,a));
-
-    return list;
-  }
-
-  function renderMain(){
-    const items = load();
-
-    // base date label
-    baseDateLabel.textContent = fmtKDate(baseDate.value);
-
-    // sums
-    const s = sumByPeriod(items, baseDate.value);
-    $("sumDayInc").textContent = fmtKRW(s.dInc);
-    $("sumDayExp").textContent = fmtKRW(s.dExp);
-    $("sumWeekInc").textContent = fmtKRW(s.wInc);
-    $("sumWeekExp").textContent = fmtKRW(s.wExp);
-    $("sumMonthInc").textContent = fmtKRW(s.mInc);
-    $("sumMonthExp").textContent = fmtKRW(s.mExp);
-    $("sumYearInc").textContent = fmtKRW(s.yInc);
-    $("sumYearExp").textContent = fmtKRW(s.yExp);
-
-    // table
-    const view = getFilteredView(items);
-    countEl.textContent = `저장 ${items.length}건 / 표시 ${view.length}건`;
-
-    rowsEl.innerHTML = "";
-    for(const it of view){
       const tr = document.createElement("tr");
-
-      const tdType = document.createElement("td");
-      tdType.innerHTML = it.type==="income"
-        ? `<span class="badge b-inc">수익</span>`
-        : `<span class="badge b-exp">지출</span>`;
-
-      const tdDate = document.createElement("td");
-      tdDate.textContent = fmtKDate(it.date);
-
-      const tdCat = document.createElement("td");
-      tdCat.textContent = it.category;
-
-      const tdMemo = document.createElement("td");
-      tdMemo.textContent = it.memo || "";
-
-      const tdAmt = document.createElement("td");
-      tdAmt.className = "right";
-      tdAmt.textContent = fmtKRW(it.amount);
-
-      const tdDel = document.createElement("td");
-      tdDel.className = "right";
-      const b = document.createElement("button");
-      b.className = "danger";
-      b.style.padding = "6px 10px";
-      b.textContent = "삭제";
-      b.onclick = () => {
-        const next = items.filter(x=>x.id!==it.id);
-        save(next);
-        renderAll();
-      };
-      tdDel.appendChild(b);
-
-      tr.appendChild(tdType);
-      tr.appendChild(tdDate);
-      tr.appendChild(tdCat);
-      tr.appendChild(tdMemo);
-      tr.appendChild(tdAmt);
-      tr.appendChild(tdDel);
-
-      rowsEl.appendChild(tr);
+      tr.innerHTML = `
+        <td>${label}</td>
+        <td class="right income">${fmtWon(v.income)}</td>
+        <td class="right expense">${fmtWon(v.expense)}</td>
+      `;
+      tbody.appendChild(tr);
     }
   }
 
-  function aggByCategory(items, period, baseIso, type){
-    const [s,e] = periodBounds(period, baseIso);
-    const map = new Map();
-    let total = 0;
+  function renderTxTable(list){
+    const tbody = document.getElementById("txBody");
+    tbody.innerHTML = "";
 
-    for(const it of items){
-      if(it.type!==type) continue;
-      if(!inRange(it.date, s, e)) continue;
-      const amt = Number(it.amount||0);
-      total += amt;
-      map.set(it.category, (map.get(it.category)||0) + amt);
+    if(list.length === 0){
+      tbody.innerHTML = `<tr><td colspan="6" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
+      return;
     }
 
-    const rows = Array.from(map.entries())
-      .map(([cat, amt]) => ({cat, amt}))
-      .sort((a,b)=> b.amt - a.amt);
+    for(const t of list){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${isoToPrettyDate(t.date)}</td>
+        <td><span class="badge ${t.type}">${t.type === "income" ? "수익" : "지출"}</span></td>
+        <td>${t.category}</td>
+        <td class="right ${t.type}">${fmtWon(t.amount)}</td>
+        <td>${escapeHtml(t.memo || "")}</td>
+        <td class="center">
+          <button class="dangerBtn" type="button" data-del="${t.id}">삭제</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
 
-    return {total, rows};
-  }
-
-  function renderRank(){
-    const items = load();
-    const period = rankPeriod.value;
-    const baseIso = rankBaseDate.value;
-
-    const inc = aggByCategory(items, period, baseIso, "income");
-    const exp = aggByCategory(items, period, baseIso, "expense");
-
-    incomeRankRows.innerHTML = "";
-    expenseRankRows.innerHTML = "";
-
-    function renderRankTable(tbody, data, isIncome){
-      const total = data.total || 0;
-
-      // 모든 카테고리 표시(0 포함) 요구를 “총합계 대비 비율” 관점으로 충족:
-      // 실제 입력이 없는 카테고리는 표에 안 나와도 되지만, 요청이 “7번 필드들 관련 총합계”라서
-      // 순위표는 “기록이 있는 항목” 중심 + 필요 시 0항목은 아래에서 추가 가능.
-      const rows = data.rows.slice();
-
-      // 0 항목도 보고 싶다면 아래 주석 해제:
-      // for(const cat of CATEGORIES){
-      //   if(!rows.find(r=>r.cat===cat)) rows.push({cat, amt:0});
-      // }
-
-      const top = rows.length ? rows : [];
-      top.forEach((r, idx)=>{
-        const tr = document.createElement("tr");
-        const pct = total>0 ? (r.amt/total*100) : 0;
-
-        const tdRank = document.createElement("td");
-        tdRank.textContent = String(idx+1);
-
-        const tdCat = document.createElement("td");
-        tdCat.innerHTML = `${r.cat} ${isIncome? `<span class="badge b-inc">수익</span>`:`<span class="badge b-exp">지출</span>`}`;
-
-        const tdAmt = document.createElement("td");
-        tdAmt.className="right";
-        tdAmt.textContent = fmtKRW(r.amt);
-
-        const tdPct = document.createElement("td");
-        tdPct.className="right";
-        tdPct.innerHTML = `<span class="pct">${pct.toFixed(1)}%</span>`;
-
-        const tdBar = document.createElement("td");
-        tdBar.innerHTML = `<div class="bar"><div style="width:${Math.min(100, pct)}%"></div></div>`;
-
-        tr.appendChild(tdRank);
-        tr.appendChild(tdCat);
-        tr.appendChild(tdAmt);
-        tr.appendChild(tdPct);
-        tr.appendChild(tdBar);
-        tbody.appendChild(tr);
+    // 삭제 이벤트
+    tbody.querySelectorAll("button[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-del");
+        transactions = transactions.filter(x => x.id !== id);
+        saveTx();
+        refreshAll();
       });
-
-      if(!top.length){
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 5;
-        td.className="muted";
-        td.textContent = "해당 기간에 기록이 없습니다.";
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-      }
-    }
-
-    renderRankTable(incomeRankRows, inc, true);
-    renderRankTable(expenseRankRows, exp, false);
-  }
-
-  function renderAll(){
-    renderMain();
-    renderRank();
-  }
-
-  function addItem(){
-    const t = typeEl.value;
-    const date = dateEl.value;
-    const category = catEl.value;
-    const amount = Number(amtEl.value);
-    const memo = memoEl.value.trim();
-
-    if(!date) return alert("날짜를 선택하세요.");
-    if(!category) return alert("카테고리를 선택하세요.");
-    if(!Number.isFinite(amount) || amount<=0) return alert("금액을 0보다 크게 입력하세요.");
-
-    const items = load();
-    items.push({
-      id: crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + "_" + Math.random().toString(16).slice(2),
-      type: t,
-      date,
-      category,
-      amount: Math.floor(amount),
-      memo,
-      createdAt: Date.now()
     });
-    save(items);
-    amtEl.value="";
-    memoEl.value="";
-    renderAll();
   }
 
-  function exportCSV(){
-    const items = load();
-    const header = ["구분","날짜(ISO)","날짜(표시)","카테고리","금액","메모"];
-    const rows = items.map(it => [
-      it.type==="income" ? "수익" : "지출",
-      it.date,
-      fmtKDate(it.date),
-      it.category,
-      String(it.amount||0),
-      (it.memo||"").replaceAll('"','""')
-    ]);
+  function renderCategorySummary(list){
+    const tbody = document.getElementById("catSumBody");
+    tbody.innerHTML = "";
 
-    const csv = [header, ...rows]
-      .map(r => r.map(x=> `"${String(x)}"`).join(","))
-      .join("\n");
+    // 카테고리별 수익/지출 합계
+    const map = new Map();
+    for(const c of CATEGORIES){
+      map.set(c, { income:0, expense:0 });
+    }
+    for(const t of list){
+      if(!map.has(t.category)) map.set(t.category, {income:0, expense:0});
+      const row = map.get(t.category);
+      if(t.type === "income") row.income += t.amount;
+      else row.expense += t.amount;
+    }
 
-    const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "offline-ledger.csv";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    // 모두 0이면
+    const any = Array.from(map.values()).some(v => v.income>0 || v.expense>0);
+    if(!any){
+      tbody.innerHTML = `<tr><td colspan="3" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
+      return;
+    }
+
+    for(const c of CATEGORIES){
+      const v = map.get(c);
+      if(v.income === 0 && v.expense === 0) continue;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${c}</td>
+        <td class="right income">${fmtWon(v.income)}</td>
+        <td class="right expense">${fmtWon(v.expense)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
   }
 
-  function clearAll(){
-    if(!confirm("정말 전체 삭제할까요?")) return;
-    localStorage.removeItem(KEY);
-    renderAll();
+  function updateDetailSection(){
+    applyDetailFilterStateToInputs();
+    const list = getFilteredTxForDetail();
+    renderBuckets(list);
+    renderTxTable(list);
+    renderCategorySummary(list);
   }
 
-  function resetForm(){
-    typeEl.value="income";
-    dateEl.value = baseDate.value;
-    catEl.value = CATEGORIES[0];
-    amtEl.value="";
-    memoEl.value="";
-    applyAmtLabel();
+  // =========================
+  // 5) 순위 페이지(요구사항 12~18)
+  // =========================
+  function applyRankFilterUI(){
+    document.getElementById("rankDayWrap").classList.toggle("hide", rankPeriod !== "day");
+    document.getElementById("rankWeekWrap").classList.toggle("hide", rankPeriod !== "week");
+    document.getElementById("rankMonthWrap").classList.toggle("hide", rankPeriod !== "month");
+    document.getElementById("rankYearWrap").classList.toggle("hide", rankPeriod !== "year");
+
+    // 값
+    if(rankPeriod === "day") document.getElementById("rankDay").value = rankAnchor;
+    if(rankPeriod === "week") document.getElementById("rankWeek").value = rankAnchor;
+    if(rankPeriod === "month") document.getElementById("rankMonth").value = rankAnchor;
+    if(rankPeriod === "year") document.getElementById("rankYear").value = rankAnchor;
   }
 
-  function setActiveTab(which){
-    if(which==="main"){
-      tabMain.classList.add("active");
-      tabRank.classList.remove("active");
-      pageMain.style.display="grid";
-      pageRank.style.display="none";
-      renderMain();
+  function getFilteredTxForRank(){
+    const range = getRange(rankPeriod, rankAnchor);
+    return transactions.filter(t => inRange(t, range.start, range.end));
+  }
+
+  function renderRankTables(){
+    const list = getFilteredTxForRank();
+
+    // 카테고리별 합계 만들기
+    const sumMap = new Map();
+    for(const c of CATEGORIES){
+      sumMap.set(c, { income:0, expense:0 });
+    }
+    for(const t of list){
+      if(!sumMap.has(t.category)) sumMap.set(t.category, {income:0, expense:0});
+      const row = sumMap.get(t.category);
+      if(t.type === "income") row.income += t.amount;
+      else row.expense += t.amount;
+    }
+
+    const totalIncome = Array.from(sumMap.values()).reduce((a,v)=>a+v.income,0);
+    const totalExpense = Array.from(sumMap.values()).reduce((a,v)=>a+v.expense,0);
+
+    // 수익 랭킹
+    const incomeRows = [];
+    for(const [cat, v] of sumMap.entries()){
+      if(v.income > 0) incomeRows.push({ cat, amount: v.income });
+    }
+    incomeRows.sort((a,b)=>b.amount-a.amount);
+
+    const incomeBody = document.getElementById("incomeRankBody");
+    incomeBody.innerHTML = "";
+    if(incomeRows.length === 0){
+      incomeBody.innerHTML = `<tr><td colspan="4" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
     }else{
-      tabRank.classList.add("active");
-      tabMain.classList.remove("active");
-      pageRank.style.display="grid";
-      pageMain.style.display="none";
-      renderRank();
+      incomeRows.forEach((r, idx) => {
+        const pct = totalIncome ? (r.amount / totalIncome * 100) : 0;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="center" style="font-weight:900;">${idx+1}</td>
+          <td>${r.cat}</td>
+          <td class="right income" style="font-weight:900;">${fmtWon(r.amount)}</td>
+          <td>
+            <div class="barWrap" title="${pct.toFixed(1)}%">
+              <div class="bar" style="width:${Math.min(100,pct).toFixed(2)}%"></div>
+            </div>
+            <div class="note">${pct.toFixed(1)}%</div>
+          </td>
+        `;
+        incomeBody.appendChild(tr);
+      });
+    }
+
+    // 지출 랭킹
+    const expenseRows = [];
+    for(const [cat, v] of sumMap.entries()){
+      if(v.expense > 0) expenseRows.push({ cat, amount: v.expense });
+    }
+    expenseRows.sort((a,b)=>b.amount-a.amount);
+
+    const expenseBody = document.getElementById("expenseRankBody");
+    expenseBody.innerHTML = "";
+    if(expenseRows.length === 0){
+      expenseBody.innerHTML = `<tr><td colspan="4" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
+    }else{
+      expenseRows.forEach((r, idx) => {
+        const pct = totalExpense ? (r.amount / totalExpense * 100) : 0;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="center" style="font-weight:900;">${idx+1}</td>
+          <td>${r.cat}</td>
+          <td class="right expense" style="font-weight:900;">${fmtWon(r.amount)}</td>
+          <td>
+            <div class="barWrap" title="${pct.toFixed(1)}%">
+              <div class="bar expense" style="width:${Math.min(100,pct).toFixed(2)}%"></div>
+            </div>
+            <div class="note">${pct.toFixed(1)}%</div>
+          </td>
+        `;
+        expenseBody.appendChild(tr);
+      });
     }
   }
 
-  // init selects
-  function initCategories(){
-    catEl.innerHTML = "";
+  // =========================
+  // 6) UI 초기화
+  // =========================
+  function initCategorySelects(){
+    // 추가 폼
+    const txCat = document.getElementById("txCategory");
+    txCat.innerHTML = "";
     for(const c of CATEGORIES){
-      const o = document.createElement("option");
-      o.value = c;
-      o.textContent = c;
-      catEl.appendChild(o);
+      const opt = document.createElement("option");
+      opt.value = c;
+      opt.textContent = c;
+      txCat.appendChild(opt);
     }
 
-    catFilter.innerHTML = "";
-    const all = document.createElement("option");
-    all.value="all"; all.textContent="전체";
-    catFilter.appendChild(all);
+    // 세부 필터(전체 포함)
+    const detCat = document.getElementById("detailCategory");
+    detCat.innerHTML = "";
+    const optAll = document.createElement("option");
+    optAll.value = "all";
+    optAll.textContent = "전체";
+    detCat.appendChild(optAll);
+
     for(const c of CATEGORIES){
-      const o = document.createElement("option");
-      o.value=c; o.textContent=c;
-      catFilter.appendChild(o);
+      const opt = document.createElement("option");
+      opt.value = c;
+      opt.textContent = c;
+      detCat.appendChild(opt);
+    }
+
+    // 칩
+    const chipRow = document.getElementById("categoryChips");
+    chipRow.innerHTML = "";
+    const allChip = document.createElement("button");
+    allChip.type="button";
+    allChip.className = "chip active";
+    allChip.textContent = "전체";
+    allChip.setAttribute("data-val","all");
+    chipRow.appendChild(allChip);
+
+    for(const c of CATEGORIES){
+      const ch = document.createElement("button");
+      ch.type="button";
+      ch.className = "chip";
+      ch.textContent = c;
+      ch.setAttribute("data-val", c);
+      chipRow.appendChild(ch);
+    }
+
+    chipRow.querySelectorAll(".chip").forEach(ch => {
+      ch.addEventListener("click", () => {
+        detailCategory = ch.getAttribute("data-val");
+        document.getElementById("detailCategory").value = detailCategory;
+        updateDetailSection();
+      });
+    });
+  }
+
+  function initDateInputs(){
+    const selectedDateInput = document.getElementById("selectedDate");
+    selectedDateInput.min = START_DATE;
+    selectedDateInput.value = selectedDate;
+
+    // 추가 폼 날짜 기본값
+    const txDate = document.getElementById("txDate");
+    txDate.min = START_DATE;
+    txDate.value = selectedDate;
+
+    // 세부 날짜들 min
+    document.getElementById("detailDay").min = START_DATE;
+    document.getElementById("detailWeek").min = START_DATE;
+
+    // 순위 날짜 min
+    document.getElementById("rankDay").min = START_DATE;
+    document.getElementById("rankWeek").min = START_DATE;
+  }
+
+  // =========================
+  // 7) 이벤트 바인딩
+  // =========================
+  function bindEvents(){
+    // 페이지 이동
+    const navLedger = document.getElementById("nav-ledger");
+    const navRank = document.getElementById("nav-rank");
+
+    navLedger.addEventListener("click", () => showPage("ledger"));
+    navRank.addEventListener("click", () => showPage("rank"));
+
+    // 날짜 이동
+    document.getElementById("btnPrevDay").addEventListener("click", () => {
+      const next = addDays(selectedDate, -1);
+      if(next < START_DATE) return;
+      selectedDate = next;
+      syncAnchorsToSelectedDate();
+      refreshAll();
+    });
+    document.getElementById("btnNextDay").addEventListener("click", () => {
+      selectedDate = addDays(selectedDate, 1);
+      syncAnchorsToSelectedDate();
+      refreshAll();
+    });
+    document.getElementById("selectedDate").addEventListener("change", (e) => {
+      const v = e.target.value;
+      if(!v || v < START_DATE) return;
+      selectedDate = v;
+      syncAnchorsToSelectedDate();
+      refreshAll();
+    });
+
+    // 내역 추가
+    document.getElementById("txForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const date = document.getElementById("txDate").value;
+      const type = document.getElementById("txType").value;
+      const category = document.getElementById("txCategory").value;
+      const amount = safeParseAmount(document.getElementById("txAmount").value);
+      const memo = document.getElementById("txMemo").value.trim();
+
+      if(!date || date < START_DATE){
+        alert("날짜를 확인해줘 (2026-01-01 이후).");
+        return;
+      }
+      if(amount === null){
+        alert("금액을 숫자로 입력해줘.");
+        return;
+      }
+
+      const tx = {
+        id: "tx_" + Date.now() + "_" + Math.random().toString(16).slice(2),
+        createdAt: Date.now(),
+        date,
+        type,
+        category,
+        amount,
+        memo
+      };
+
+      transactions.push(tx);
+      saveTx();
+
+      // 입력 초기화(금액/메모)
+      document.getElementById("txAmount").value = "";
+      document.getElementById("txMemo").value = "";
+
+      refreshAll();
+    });
+
+    // 세부 탭
+    document.querySelectorAll(".tabBtn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const p = btn.getAttribute("data-period");
+        detailPeriod = p;
+
+        document.querySelectorAll(".tabBtn").forEach(b => b.classList.toggle("active", b === btn));
+
+        // 기간 바뀌면 기준값도 적당히 맞춰줌
+        if(p === "day" || p === "week") detailAnchor = selectedDate;
+        if(p === "month") detailAnchor = selectedDate.slice(0,7);
+        if(p === "year") detailAnchor = selectedDate.slice(0,4);
+
+        updateDetailSection();
+      });
+    });
+
+    // 세부 필터 변경
+    document.getElementById("detailDay").addEventListener("change", (e) => {
+      if(detailPeriod !== "day") return;
+      const v = e.target.value;
+      if(!v || v < START_DATE) return;
+      detailAnchor = v;
+      updateDetailSection();
+    });
+    document.getElementById("detailWeek").addEventListener("change", (e) => {
+      if(detailPeriod !== "week") return;
+      const v = e.target.value;
+      if(!v || v < START_DATE) return;
+      detailAnchor = v;
+      updateDetailSection();
+    });
+    document.getElementById("detailMonth").addEventListener("change", (e) => {
+      if(detailPeriod !== "month") return;
+      const v = e.target.value; // YYYY-MM
+      if(!v) return;
+      detailAnchor = v;
+      updateDetailSection();
+    });
+    document.getElementById("detailYear").addEventListener("change", (e) => {
+      if(detailPeriod !== "year") return;
+      const v = String(e.target.value || "").trim();
+      if(!/^\d{4}$/.test(v) || Number(v) < 2026) return;
+      detailAnchor = v;
+      updateDetailSection();
+    });
+
+    document.getElementById("detailCategory").addEventListener("change", (e) => {
+      detailCategory = e.target.value;
+      updateDetailSection();
+    });
+    document.getElementById("detailType").addEventListener("change", (e) => {
+      detailType = e.target.value;
+      updateDetailSection();
+    });
+
+    // 순위 필터
+    document.getElementById("rankPeriod").addEventListener("change", (e) => {
+      rankPeriod = e.target.value;
+      // 기간 바뀌면 anchor도 기본값 동기화
+      if(rankPeriod === "day" || rankPeriod === "week") rankAnchor = selectedDate;
+      if(rankPeriod === "month") rankAnchor = selectedDate.slice(0,7);
+      if(rankPeriod === "year") rankAnchor = selectedDate.slice(0,4);
+
+      applyRankFilterUI();
+      renderRankTables();
+    });
+
+    document.getElementById("rankDay").addEventListener("change", (e) => {
+      if(rankPeriod !== "day") return;
+      const v = e.target.value;
+      if(!v || v < START_DATE) return;
+      rankAnchor = v;
+      renderRankTables();
+    });
+    document.getElementById("rankWeek").addEventListener("change", (e) => {
+      if(rankPeriod !== "week") return;
+      const v = e.target.value;
+      if(!v || v < START_DATE) return;
+      rankAnchor = v;
+      renderRankTables();
+    });
+    document.getElementById("rankMonth").addEventListener("change", (e) => {
+      if(rankPeriod !== "month") return;
+      const v = e.target.value;
+      if(!v) return;
+      rankAnchor = v;
+      renderRankTables();
+    });
+    document.getElementById("rankYear").addEventListener("change", (e) => {
+      if(rankPeriod !== "year") return;
+      const v = String(e.target.value || "").trim();
+      if(!/^\d{4}$/.test(v) || Number(v) < 2026) return;
+      rankAnchor = v;
+      renderRankTables();
+    });
+  }
+
+  function syncAnchorsToSelectedDate(){
+    // 상단 날짜 바뀌면 기본적으로 세부/순위도 같은 기준으로 맞춤
+    document.getElementById("txDate").value = selectedDate;
+
+    if(detailPeriod === "day" || detailPeriod === "week") detailAnchor = selectedDate;
+    if(detailPeriod === "month") detailAnchor = selectedDate.slice(0,7);
+    if(detailPeriod === "year") detailAnchor = selectedDate.slice(0,4);
+
+    if(rankPeriod === "day" || rankPeriod === "week") rankAnchor = selectedDate;
+    if(rankPeriod === "month") rankAnchor = selectedDate.slice(0,7);
+    if(rankPeriod === "year") rankAnchor = selectedDate.slice(0,4);
+  }
+
+  // =========================
+  // 8) 페이지 전환
+  // =========================
+  function showPage(which){
+    const isLedger = (which === "ledger");
+    document.getElementById("page-ledger").classList.toggle("active", isLedger);
+    document.getElementById("page-rank").classList.toggle("active", !isLedger);
+
+    document.getElementById("nav-ledger").classList.toggle("active", isLedger);
+    document.getElementById("nav-rank").classList.toggle("active", !isLedger);
+
+    if(!isLedger){
+      applyRankFilterUI();
+      renderRankTables();
     }
   }
 
-  // events
-  tabMain.addEventListener("click", ()=>setActiveTab("main"));
-  tabRank.addEventListener("click", ()=>setActiveTab("rank"));
+  // =========================
+  // 9) escape (메모 안전 표시)
+  // =========================
+  function escapeHtml(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
 
-  baseDate.addEventListener("change", ()=>{
-    baseDateLabel.textContent = fmtKDate(baseDate.value);
-    dateEl.value = baseDate.value;
-    rankBaseDate.value = baseDate.value;
-    renderAll();
-  });
+  // =========================
+  // 10) 전체 갱신
+  // =========================
+  function refreshAll(){
+    updateTopSummary();
+    applyDetailFilterStateToInputs();
+    updateDetailSection();
+    applyRankFilterUI();
+    renderRankTables();
+  }
 
-  rankBaseDate.addEventListener("change", renderRank);
-  rankPeriod.addEventListener("change", renderRank);
+  // =========================
+  // 11) 초기 실행
+  // =========================
+  (function init(){
+    initCategorySelects();
+    initDateInputs();
+    bindEvents();
 
-  typeEl.addEventListener("change", applyAmtLabel);
-  addBtn.addEventListener("click", addItem);
-  resetBtn.addEventListener("click", resetForm);
-  exportBtn.addEventListener("click", exportCSV);
-  clearBtn.addEventListener("click", clearAll);
+    // 기본값 세팅 (요구사항 6)
+    selectedDate = START_DATE;
+    document.getElementById("selectedDate").value = selectedDate;
+    document.getElementById("txDate").value = selectedDate;
 
-  periodFilter.addEventListener("change", renderMain);
-  catFilter.addEventListener("change", renderMain);
-  sortEl.addEventListener("change", renderMain);
+    // 세부 기본 anchor
+    detailAnchor = START_DATE;
+    document.getElementById("detailDay").value = detailAnchor;
+    document.getElementById("detailWeek").value = detailAnchor;
 
-  // boot
-  initCategories();
+    // 월/년 기본값
+    document.getElementById("detailMonth").value = selectedDate.slice(0,7);
+    document.getElementById("detailYear").value = selectedDate.slice(0,4);
 
-  // base date fixed start
-  baseDate.min = DEFAULT_BASE_ISO;
-  dateEl.min = DEFAULT_BASE_ISO;
-  rankBaseDate.min = DEFAULT_BASE_ISO;
+    // 순위 기본값
+    document.getElementById("rankPeriod").value = rankPeriod;
+    document.getElementById("rankDay").value = selectedDate;
+    document.getElementById("rankWeek").value = selectedDate;
+    document.getElementById("rankMonth").value = selectedDate.slice(0,7);
+    document.getElementById("rankYear").value = selectedDate.slice(0,4);
 
-  baseDate.value = DEFAULT_BASE_ISO;
-  rankBaseDate.value = DEFAULT_BASE_ISO;
-  dateEl.value = DEFAULT_BASE_ISO;
+    // 세부 필터 select 기본
+    document.getElementById("detailCategory").value = detailCategory;
+    document.getElementById("detailType").value = detailType;
 
-  applyAmtLabel();
-  resetForm();
-  renderAll();
-})();
+    refreshAll();
+  })();
 </script>
 </body>
 </html>
