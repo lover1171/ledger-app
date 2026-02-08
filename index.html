@@ -1,790 +1,1525 @@
-<script>
-  // =========================
-  // Offline Ledger (Final)
-  // - 네트워크 사용 코드 없음
-  // - CSP로 connect-src 'none' 이므로 fetch/XHR/WebSocket도 원천 차단됨
-  // - localStorage만 사용
-  // - 기존 가계부 데이터(INLINE_TX) 1회 병합 지원 (앱 구조 변경 없음)
-  // =========================
-
-  const START_DATE = "2026-01-01";
-  const STORAGE_KEY = "offline_ledger_v1";
-
-  // ✅ [2)에서 복사한 JSON 배열]을 아래에 그대로 붙여넣기
-  // 예) const INLINE_TX = [{"id":"tx_...","createdAt":...,"date":"2026-01-01","type":"expense","category":"생활","amount":12000,"memo":"점심"}];
-  // 붙여넣기 어려우면 비워둬도 됨(같은 origin이면 기존 localStorage 그대로 읽음)
-  const INLINE_TX = [];
-
-  // 인라인 병합 1회만 수행하도록 플래그
-  const INLINE_MERGED_FLAG = STORAGE_KEY + "__inline_merged_v1";
-
-  const CATEGORIES = [
-    "생활","문화/여가","건강/의료","뷰티","적금","주식","대출","교통",
-    "선물","용돈","보험","통신","교육","간식","외식","기타","급여"
-  ];
-
-  const WEEKDAY_KO = ["일","월","화","수","목","금","토"];
-
-  // ✅ 주(week)에서 전월/익월 데이터가 섞이는 걸 막고 싶으면 true
-  const CLAMP_WEEK_TO_MONTH = true;
-
-  // ====== DOM helper ======
-  const $ = (id) => document.getElementById(id);
-
-  // =========================
-  // 0) 저장/불러오기 + 병합 유틸
-  // =========================
-  function normalizeTx(t){
-    if(!t) return null;
-
-    if(typeof t.id !== "string" || !t.id) return null;
-    if(typeof t.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(t.date)) return null;
-    if(t.type !== "income" && t.type !== "expense") return null;
-    if(typeof t.category !== "string" || !t.category) return null;
-
-    const amountNum = Number(t.amount);
-    if(!isFinite(amountNum) || amountNum < 0) return null;
-
-    const createdAt =
-      (typeof t.createdAt === "number" && isFinite(t.createdAt)) ? t.createdAt : Date.now();
-
-    const memo = (typeof t.memo === "string") ? t.memo : "";
-
-    return {
-      id: t.id,
-      createdAt,
-      date: t.date,
-      type: t.type,
-      category: t.category,
-      amount: Math.round(amountNum),
-      memo
-    };
-  }
-
-  function normalizeTxArray(arr){
-    if(!Array.isArray(arr)) return [];
-    const out = [];
-    for(const t of arr){
-      const nt = normalizeTx(t);
-      if(nt) out.push(nt);
-    }
-    return out;
-  }
-
-  function loadTx(){
-    try{
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if(!raw) return [];
-      return normalizeTxArray(JSON.parse(raw));
-    }catch(e){
-      return [];
-    }
-  }
-
-  function saveTx(list){
-    try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    }catch(e){}
-  }
-
-  function mergeTxById(existing, incoming){
-    // id 기준 중복 제거 (기존 데이터 우선)
-    const map = new Map();
-    for(const t of existing) map.set(t.id, t);
-    for(const t of incoming){
-      if(!map.has(t.id)) map.set(t.id, t);
-    }
-    return Array.from(map.values());
-  }
-
-  function mergeInlineTxOnceIfProvided(){
-    // INLINE_TX가 비었으면 아무것도 안 함
-    if(!Array.isArray(INLINE_TX) || INLINE_TX.length === 0) return;
-
-    try{
-      if(localStorage.getItem(INLINE_MERGED_FLAG) === "1") return;
-    }catch(e){
-      return;
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>오프라인 가계부 앱</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#121a33;
+      --panel2:#0f1630;
+      --text:#e9ecf5;
+      --muted:#aab2d5;
+      --line:rgba(255,255,255,.10);
+      --good:#2dd4bf;
+      --bad:#fb7185;
+      --warn:#fbbf24;
+      --chip:#1b2750;
+      --btn:#1a2650;
+      --btn2:#24346b;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
     }
 
-    const incoming = normalizeTxArray(INLINE_TX);
-    const existing = loadTx();
-
-    const merged = mergeTxById(existing, incoming);
-
-    // 날짜/생성시간 기준 정렬(표시에 직접 영향은 없지만 데이터 정돈)
-    merged.sort((a,b) => (a.date.localeCompare(b.date) || (a.createdAt - b.createdAt)));
-
-    saveTx(merged);
-
-    try{
-      localStorage.setItem(INLINE_MERGED_FLAG, "1");
-    }catch(e){}
-  }
-
-  // ✅ UI 변경 없이 콘솔로 내보내기/가져오기 도우미 제공
-  window.exportLedgerJSON = function(){
-    try{
-      return localStorage.getItem(STORAGE_KEY) || "[]";
-    }catch(e){
-      return "[]";
-    }
-  };
-  window.importLedgerJSON = function(jsonString){
-    const incoming = normalizeTxArray(JSON.parse(String(jsonString || "[]")));
-    const existing = loadTx();
-    const merged = mergeTxById(existing, incoming);
-    merged.sort((a,b) => (a.date.localeCompare(b.date) || (a.createdAt - b.createdAt)));
-    saveTx(merged);
-    return merged.length;
-  };
-
-  // =========================
-  // 1) 날짜 유틸(UTC 안전)
-  // =========================
-  function pad2(n){ return String(n).padStart(2,"0"); }
-
-  function parseISODateUTC(iso){
-    const [y,m,d] = iso.split("-").map(Number);
-    return new Date(Date.UTC(y, m - 1, d));
-  }
-
-  function toISODateUTC(date){
-    return date.toISOString().slice(0, 10);
-  }
-
-  function addDays(iso, days){
-    const d = parseISODateUTC(iso);
-    d.setUTCDate(d.getUTCDate() + days);
-    return toISODateUTC(d);
-  }
-
-  function weekStart(iso){
-    const d = parseISODateUTC(iso);
-    const day = d.getUTCDay(); // 0:일 1:월...
-    const diff = (day === 0) ? -6 : (1 - day);
-    d.setUTCDate(d.getUTCDate() + diff);
-    return toISODateUTC(d);
-  }
-
-  function isoToPrettyDate(iso){
-    const d = parseISODateUTC(iso);
-    const y = d.getUTCFullYear();
-    const m = pad2(d.getUTCMonth() + 1);
-    const day = pad2(d.getUTCDate());
-    const w = WEEKDAY_KO[d.getUTCDay()];
-    return `${y}.${m}.${day} ${w}`;
-  }
-
-  function isoToPrettyYM(ym){
-    const [y,m] = ym.split("-");
-    return `${y}.${m}`;
-  }
-
-  function maxISO(a, b){ return (a > b) ? a : b; }
-  function minISO(a, b){ return (a < b) ? a : b; }
-
-  function getMonthRangeByDate(dateISO){
-    const ym = dateISO.slice(0,7);
-    const start = `${ym}-01`;
-    const d = parseISODateUTC(start);
-    d.setUTCMonth(d.getUTCMonth() + 1);
-    const end = toISODateUTC(d);
-    return { start, end };
-  }
-
-  function getYearRangeByDate(dateISO){
-    const yy = dateISO.slice(0,4);
-    const start = `${yy}-01-01`;
-    const d = parseISODateUTC(start);
-    d.setUTCFullYear(d.getUTCFullYear() + 1);
-    const end = toISODateUTC(d);
-    return { start, end };
-  }
-
-  function getRange(period, dateISO){
-    if(period === "day"){
-      return { start: dateISO, end: addDays(dateISO, 1) };
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      background: radial-gradient(1200px 700px at 20% 0%, #182357 0%, var(--bg) 55%);
+      color:var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, "Noto Sans KR", Arial, sans-serif;
+      line-height:1.4;
     }
 
-    if(period === "week"){
-      const start0 = weekStart(dateISO);
-      const end0 = addDays(start0, 7);
+    a{ color:inherit; }
 
-      if(!CLAMP_WEEK_TO_MONTH) return { start: start0, end: end0 };
-
-      const m = getMonthRangeByDate(dateISO);
-      const start = maxISO(start0, m.start);
-      const end = minISO(end0, m.end);
-      return { start, end };
+    .appHeader{
+      position:sticky;
+      top:0;
+      z-index:10;
+      backdrop-filter: blur(10px);
+      background: rgba(10, 14, 30, .72);
+      border-bottom:1px solid var(--line);
     }
 
-    if(period === "month"){
-      return getMonthRangeByDate(dateISO);
+    /* (요구사항 1) 상단 문구 제거 -> 헤더는 네비만 남김 */
+    .headerInner{
+      max-width:1100px;
+      margin:0 auto;
+      padding:12px 14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
     }
 
-    return getYearRangeByDate(dateISO);
-  }
-
-  function inRange(tx, start, end){
-    return tx.date >= start && tx.date < end;
-  }
-
-  function sumTx(list){
-    let income = 0, expense = 0;
-    for(const t of list){
-      if(t.type === "income") income += t.amount;
-      else expense += t.amount;
+    /* (요구사항 2) 요약/추가/내역/설정 최상단 가로 배치(작은 화면이면 가로 스크롤) */
+    .navTabs{
+      display:flex;
+      gap:8px;
+      flex-wrap:nowrap;
+      justify-content:center;
+      overflow-x:auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom:2px;
     }
-    return { income, expense };
-  }
+    .navTabs::-webkit-scrollbar{ height:0; }
 
-  function fmtWon(n){
-    const v = Math.round(Number(n) || 0);
-    return v.toLocaleString("ko-KR") + "원";
-  }
-
-  function safeParseAmount(v){
-    const n = Number(v);
-    if(!isFinite(n) || n < 0) return null;
-    return Math.round(n);
-  }
-
-  function escapeHtml(s){
-    return String(s)
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  // =========================
-  // 2) 상태 (인라인 병합 -> 로드)
-  // =========================
-  mergeInlineTxOnceIfProvided();
-
-  let transactions = loadTx();
-  let selectedDate = START_DATE;
-
-  let detailPeriod = "day";
-  let detailCategory = "all";
-  let detailType = "all";
-
-  let rankPeriod = "day";
-
-  // =========================
-  // 3) 기준 날짜 변경
-  // =========================
-  function setSelectedDate(nextISO){
-    if(!nextISO || nextISO < START_DATE) return;
-    selectedDate = nextISO;
-    refreshAll();
-  }
-
-  function setSelectedMonth(ym){
-    if(!ym) return;
-    if(ym < START_DATE.slice(0,7)) return;
-    setSelectedDate(`${ym}-01`);
-  }
-
-  function setSelectedYear(yy){
-    const v = String(yy || "").trim();
-    if(!/^\d{4}$/.test(v) || Number(v) < 2026) return;
-    setSelectedDate(`${v}-01-01`);
-  }
-
-  // =========================
-  // 4) 상단 요약
-  // =========================
-  function updateTopSummary(){
-    $("selectedDate").value = selectedDate;
-    $("selectedDatePretty").textContent = isoToPrettyDate(selectedDate);
-
-    const rDay = getRange("day", selectedDate);
-    const rWeek = getRange("week", selectedDate);
-    const rMonth = getRange("month", selectedDate);
-    const rYear = getRange("year", selectedDate);
-
-    const txDay = transactions.filter(t => inRange(t, rDay.start, rDay.end));
-    const txWeek = transactions.filter(t => inRange(t, rWeek.start, rWeek.end));
-    const txMonth = transactions.filter(t => inRange(t, rMonth.start, rMonth.end));
-    const txYear = transactions.filter(t => inRange(t, rYear.start, rYear.end));
-
-    const sDay = sumTx(txDay);
-    const sWeek = sumTx(txWeek);
-    const sMonth = sumTx(txMonth);
-    const sYear = sumTx(txYear);
-
-    $("sumDayIncome").textContent = fmtWon(sDay.income);
-    $("sumDayExpense").textContent = fmtWon(sDay.expense);
-
-    $("sumWeekIncome").textContent = fmtWon(sWeek.income);
-    $("sumWeekExpense").textContent = fmtWon(sWeek.expense);
-
-    $("sumMonthIncome").textContent = fmtWon(sMonth.income);
-    $("sumMonthExpense").textContent = fmtWon(sMonth.expense);
-
-    $("sumYearIncome").textContent = fmtWon(sYear.income);
-    $("sumYearExpense").textContent = fmtWon(sYear.expense);
-
-    $("txDate").value = selectedDate;
-  }
-
-  // =========================
-  // 5) 세부항목
-  // =========================
-  function applyDetailFilterStateToInputs(){
-    $("filterDayWrap").classList.toggle("hide", detailPeriod !== "day");
-    $("filterWeekWrap").classList.toggle("hide", detailPeriod !== "week");
-    $("filterMonthWrap").classList.toggle("hide", detailPeriod !== "month");
-    $("filterYearWrap").classList.toggle("hide", detailPeriod !== "year");
-
-    $("detailDay").value = selectedDate;
-    $("detailWeek").value = selectedDate;
-    $("detailMonth").value = selectedDate.slice(0,7);
-    $("detailYear").value = selectedDate.slice(0,4);
-
-    $("detailCategory").value = detailCategory;
-    $("detailType").value = detailType;
-
-    const chips = document.querySelectorAll("#categoryChips .chip");
-    chips.forEach(ch => {
-      const v = ch.getAttribute("data-val");
-      ch.classList.toggle("active", v === detailCategory);
-    });
-  }
-
-  function getFilteredTxForDetail(){
-    const range = getRange(detailPeriod, selectedDate);
-    let list = transactions.filter(t => inRange(t, range.start, range.end));
-
-    if(detailCategory !== "all") list = list.filter(t => t.category === detailCategory);
-    if(detailType !== "all") list = list.filter(t => t.type === detailType);
-
-    list.sort((a,b) => (b.date.localeCompare(a.date) || b.createdAt - a.createdAt));
-    return list;
-  }
-
-  function renderBuckets(list){
-    const map = new Map();
-    for(const t of list){
-      const key = (detailPeriod === "year") ? t.date.slice(0,7) : t.date;
-      if(!map.has(key)) map.set(key, { income:0, expense:0 });
-      const bucket = map.get(key);
-      if(t.type === "income") bucket.income += t.amount;
-      else bucket.expense += t.amount;
+    .navBtn{
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:700;
+      box-shadow: 0 6px 16px rgba(0,0,0,.25);
+      transition: .12s transform ease, .12s background ease, .12s border ease;
+      white-space:nowrap;
+      flex: 0 0 auto;
+    }
+    .navBtn:hover{ transform: translateY(-1px); }
+    .navBtn.active{
+      background: linear-gradient(180deg, rgba(45,212,191,.25), rgba(45,212,191,.08));
+      border-color: rgba(45,212,191,.35);
     }
 
-    const keys = Array.from(map.keys()).sort();
-    const tbody = $("bucketBody");
-    tbody.innerHTML = "";
-
-    if(keys.length === 0){
-      tbody.innerHTML = `<tr><td colspan="3" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
-      return;
+    main{
+      max-width:1100px;
+      margin:0 auto;
+      padding:18px 14px 40px;
     }
 
-    for(const k of keys){
-      const v = map.get(k);
-      const label = (detailPeriod === "year") ? isoToPrettyYM(k) : isoToPrettyDate(k);
+    .page{ display:none; }
+    .page.active{ display:block; }
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${label}</td>
-        <td class="right income">${fmtWon(v.income)}</td>
-        <td class="right expense">${fmtWon(v.expense)}</td>
-      `;
-      tbody.appendChild(tr);
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:12px;
     }
-  }
-
-  function renderTxTable(list){
-    const tbody = $("txBody");
-    tbody.innerHTML = "";
-
-    if(list.length === 0){
-      tbody.innerHTML = `<tr><td colspan="6" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
-      return;
+    .card{
+      grid-column: span 12;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow: var(--shadow);
+      padding:14px;
     }
-
-    for(const t of list){
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${isoToPrettyDate(t.date)}</td>
-        <td><span class="badge ${t.type}">${t.type === "income" ? "수익" : "지출"}</span></td>
-        <td>${t.category}</td>
-        <td class="right ${t.type}">${fmtWon(t.amount)}</td>
-        <td>${escapeHtml(t.memo || "")}</td>
-        <td class="center">
-          <button class="dangerBtn" type="button" data-del="${t.id}">삭제</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
+    .cardTitle{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+      flex-wrap:wrap;
     }
-
-    tbody.querySelectorAll("button[data-del]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-del");
-        transactions = transactions.filter(x => x.id !== id);
-        saveTx(transactions);
-        refreshAll();
-      });
-    });
-  }
-
-  function renderCategorySummary(list){
-    const tbody = $("catSumBody");
-    tbody.innerHTML = "";
-
-    const map = new Map();
-    for(const c of CATEGORIES) map.set(c, { income:0, expense:0 });
-
-    for(const t of list){
-      if(!map.has(t.category)) map.set(t.category, {income:0, expense:0});
-      const row = map.get(t.category);
-      if(t.type === "income") row.income += t.amount;
-      else row.expense += t.amount;
+    .cardTitle h2{
+      margin:0;
+      font-size:14px;
+      letter-spacing:.2px;
     }
+    .muted{ color:var(--muted); }
 
-    const any = Array.from(map.values()).some(v => v.income>0 || v.expense>0);
-    if(!any){
-      tbody.innerHTML = `<tr><td colspan="3" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
-      return;
+    .statGrid{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:12px;
     }
-
-    for(const c of CATEGORIES){
-      const v = map.get(c);
-      if(v.income === 0 && v.expense === 0) continue;
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${c}</td>
-        <td class="right income">${fmtWon(v.income)}</td>
-        <td class="right expense">${fmtWon(v.expense)}</td>
-      `;
-      tbody.appendChild(tr);
+    .stat{
+      grid-column: span 12;
+      padding:14px;
     }
-  }
+    @media (min-width: 720px){
+      .stat{ grid-column: span 4; }
+      .card.half{ grid-column: span 6; }
+    }
+    .statLabel{
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:6px;
+    }
+    .statValue{
+      font-size:22px;
+      font-weight:900;
+      letter-spacing:.2px;
+    }
+    .good{ color:var(--good); }
+    .bad{ color:var(--bad); }
+    .warn{ color:var(--warn); }
 
-  function updateDetailSection(){
-    applyDetailFilterStateToInputs();
-    const list = getFilteredTxForDetail();
-    renderBuckets(list);
-    renderTxTable(list);
-    renderCategorySummary(list);
-  }
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .spacer{ flex:1; }
 
-  // =========================
-  // 6) 순위 페이지
-  // =========================
-  function applyRankFilterUI(){
-    $("rankDayWrap").classList.toggle("hide", rankPeriod !== "day");
-    $("rankWeekWrap").classList.toggle("hide", rankPeriod !== "week");
-    $("rankMonthWrap").classList.toggle("hide", rankPeriod !== "month");
-    $("rankYearWrap").classList.toggle("hide", rankPeriod !== "year");
-
-    $("rankDay").value = selectedDate;
-    $("rankWeek").value = selectedDate;
-    $("rankMonth").value = selectedDate.slice(0,7);
-    $("rankYear").value = selectedDate.slice(0,4);
-
-    $("rankPeriod").value = rankPeriod;
-  }
-
-  function getFilteredTxForRank(){
-    const range = getRange(rankPeriod, selectedDate);
-    return transactions.filter(t => inRange(t, range.start, range.end));
-  }
-
-  function renderRankTables(){
-    const list = getFilteredTxForRank();
-
-    const sumMap = new Map();
-    for(const c of CATEGORIES) sumMap.set(c, { income:0, expense:0 });
-
-    for(const t of list){
-      if(!sumMap.has(t.category)) sumMap.set(t.category, {income:0, expense:0});
-      const row = sumMap.get(t.category);
-      if(t.type === "income") row.income += t.amount;
-      else row.expense += t.amount;
+    .input, select, textarea,
+    input[type="date"], input[type="week"], input[type="month"], input[type="number"], input[type="text"]{
+      width:100%;
+      padding:12px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background: rgba(0,0,0,.20);
+      color:var(--text);
+      outline:none;
+    }
+    select{ cursor:pointer; }
+    label{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:6px;
     }
 
-    const totalIncome = Array.from(sumMap.values()).reduce((a,v)=>a+v.income,0);
-    const totalExpense = Array.from(sumMap.values()).reduce((a,v)=>a+v.expense,0);
-
-    const incomeRows = [];
-    for(const [cat, v] of sumMap.entries()){
-      if(v.income > 0) incomeRows.push({ cat, amount: v.income });
+    .form{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:12px;
     }
-    incomeRows.sort((a,b)=>b.amount-a.amount);
+    .field{ grid-column: span 12; }
+    @media (min-width: 720px){
+      .field.half{ grid-column: span 6; }
+      .field.third{ grid-column: span 4; }
+    }
+    .help{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:6px;
+    }
 
-    const incomeBody = $("incomeRankBody");
-    incomeBody.innerHTML = "";
-    if(incomeRows.length === 0){
-      incomeBody.innerHTML = `<tr><td colspan="4" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
-    }else{
-      incomeRows.forEach((r, idx) => {
-        const pct = totalIncome ? (r.amount / totalIncome * 100) : 0;
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td class="center" style="font-weight:900;">${idx+1}</td>
-          <td>${r.cat}</td>
-          <td class="right income" style="font-weight:900;">${fmtWon(r.amount)}</td>
-          <td>
-            <div class="barWrap" title="${pct.toFixed(1)}%">
-              <div class="bar" style="width:${Math.min(100,pct).toFixed(2)}%"></div>
+    .seg{
+      display:flex;
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:12px;
+      overflow:hidden;
+      background: rgba(0,0,0,.18);
+    }
+    /* 추가 페이지(기존) 세그 버튼 */
+    .segBtn{
+      flex:1;
+      padding:10px 10px;
+      border:0;
+      background: transparent;
+      color:var(--text);
+      cursor:pointer;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+    .segBtn.active{
+      background: linear-gradient(180deg, rgba(36,52,107,.65), rgba(26,38,80,.35));
+    }
+
+    /* 내역 페이지용(새로 추가) 세그 버튼: 기존 .segBtn 이벤트와 충돌 방지 */
+    .segBtnAlt{
+      flex:1;
+      padding:10px 10px;
+      border:0;
+      background: transparent;
+      color:var(--text);
+      cursor:pointer;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+    .segBtnAlt.active{
+      background: linear-gradient(180deg, rgba(36,52,107,.65), rgba(26,38,80,.35));
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+      margin-top:4px;
+    }
+    .btn{
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      color:var(--text);
+      padding:11px 14px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:800;
+      transition: .12s transform ease, .12s border ease, .12s background ease;
+    }
+    .btn:hover{ transform: translateY(-1px); }
+    .btn.primary{
+      border-color: rgba(45,212,191,.35);
+      background: linear-gradient(180deg, rgba(45,212,191,.25), rgba(45,212,191,.10));
+    }
+    .btn.danger{
+      border-color: rgba(251,113,133,.35);
+      background: linear-gradient(180deg, rgba(251,113,133,.22), rgba(251,113,133,.08));
+    }
+
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .item{
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      justify-content:space-between;
+      padding:12px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background: rgba(0,0,0,.18);
+    }
+    .itemLeft{
+      min-width:0;
+      flex:1;
+    }
+    .itemMeta{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-bottom:4px;
+    }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      background: rgba(27,39,80,.65);
+      border:1px solid var(--line);
+      font-size:12px;
+      color:var(--text);
+      font-weight:800;
+    }
+    .chip.good{ color: var(--good); }
+    .chip.bad{ color: var(--bad); }
+    .itemTitle{
+      font-weight:900;
+      letter-spacing:.2px;
+      margin-bottom:4px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .itemMemo{
+      color:var(--muted);
+      font-size:12px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .itemRight{
+      text-align:right;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      align-items:flex-end;
+      min-width: 120px;
+    }
+    .amount{
+      font-size:16px;
+      font-weight:950;
+      letter-spacing:.2px;
+    }
+    .miniActions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .miniBtn{
+      border:1px solid var(--line);
+      background: rgba(0,0,0,.18);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:800;
+      font-size:12px;
+    }
+    .miniBtn.danger{
+      border-color: rgba(251,113,133,.35);
+    }
+
+    .empty{
+      text-align:center;
+      color:var(--muted);
+      padding:26px 10px;
+      border:1px dashed var(--line);
+      border-radius:16px;
+      background: rgba(0,0,0,.10);
+    }
+
+    .barList{ display:flex; flex-direction:column; gap:10px; }
+    .barRow{ display:grid; grid-template-columns: 1fr 90px; gap:10px; align-items:center; }
+    .barLabel{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:6px;
+    }
+    .barTrack{
+      height:10px;
+      border-radius:999px;
+      background: rgba(255,255,255,.08);
+      overflow:hidden;
+      border:1px solid var(--line);
+    }
+    .barFill{
+      height:100%;
+      width:0%;
+      border-radius:999px;
+      background: linear-gradient(90deg, rgba(251,113,133,.75), rgba(45,212,191,.75));
+    }
+    .barAmt{
+      text-align:right;
+      font-weight:900;
+      font-size:12px;
+      color:var(--text);
+      white-space:nowrap;
+    }
+
+    .toast{
+      position:fixed;
+      left:50%;
+      bottom:18px;
+      transform: translateX(-50%);
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background: rgba(10, 14, 30, .88);
+      box-shadow: var(--shadow);
+      color:var(--text);
+      font-weight:800;
+      font-size:12px;
+      opacity:0;
+      pointer-events:none;
+      transition: .18s opacity ease, .18s transform ease;
+    }
+    .toast.show{
+      opacity:1;
+      transform: translateX(-50%) translateY(-2px);
+    }
+  </style>
+</head>
+
+<body>
+  <header class="appHeader">
+    <div class="headerInner">
+      <nav class="navTabs" aria-label="페이지 이동">
+        <button class="navBtn active" type="button" data-page="dashboard">요약</button>
+        <button class="navBtn" type="button" data-page="add">추가</button>
+        <button class="navBtn" type="button" data-page="history">내역</button>
+        <button class="navBtn" type="button" data-page="settings">설정</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- 요약 -->
+    <section id="dashboard" class="page active">
+      <div class="grid">
+        <!-- 월 요약 -->
+        <div class="card">
+          <div class="cardTitle">
+            <h2>이번 달 요약</h2>
+            <div class="row">
+              <label class="muted" for="dashMonth" style="margin:0;">월 선택</label>
+              <input id="dashMonth" type="month" style="width:auto; min-width:160px;" />
             </div>
-            <div class="note">${pct.toFixed(1)}%</div>
-          </td>
-        `;
-        incomeBody.appendChild(tr);
-      });
-    }
+          </div>
 
-    const expenseRows = [];
-    for(const [cat, v] of sumMap.entries()){
-      if(v.expense > 0) expenseRows.push({ cat, amount: v.expense });
-    }
-    expenseRows.sort((a,b)=>b.amount-a.amount);
-
-    const expenseBody = $("expenseRankBody");
-    expenseBody.innerHTML = "";
-    if(expenseRows.length === 0){
-      expenseBody.innerHTML = `<tr><td colspan="4" class="center" style="color:var(--muted); font-weight:900;">데이터 없음</td></tr>`;
-    }else{
-      expenseRows.forEach((r, idx) => {
-        const pct = totalExpense ? (r.amount / totalExpense * 100) : 0;
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td class="center" style="font-weight:900;">${idx+1}</td>
-          <td>${r.cat}</td>
-          <td class="right expense" style="font-weight:900;">${fmtWon(r.amount)}</td>
-          <td>
-            <div class="barWrap" title="${pct.toFixed(1)}%">
-              <div class="bar expense" style="width:${Math.min(100,pct).toFixed(2)}%"></div>
+          <div class="statGrid">
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">수입</div>
+              <div id="dashIncome" class="statValue good">0원</div>
             </div>
-            <div class="note">${pct.toFixed(1)}%</div>
-          </td>
-        `;
-        expenseBody.appendChild(tr);
-      });
-    }
-  }
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">지출</div>
+              <div id="dashExpense" class="statValue bad">0원</div>
+            </div>
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">잔액</div>
+              <div id="dashBalance" class="statValue">0원</div>
+            </div>
+          </div>
+        </div>
 
-  // =========================
-  // 7) UI 초기화
-  // =========================
-  function initCategorySelects(){
-    const txCat = $("txCategory");
-    txCat.innerHTML = "";
-    for(const c of CATEGORIES){
-      const opt = document.createElement("option");
-      opt.value = c;
-      opt.textContent = c;
-      txCat.appendChild(opt);
-    }
+        <!-- 일별 요약 (달력 사용 + "년 월 일 (요일)" 표기) -->
+        <div class="card">
+          <div class="cardTitle">
+            <h2>일별 요약</h2>
+            <div class="row">
+              <label class="muted" for="dailyDate" style="margin:0;">날짜</label>
+              <input id="dailyDate" type="date" style="width:auto; min-width:180px;" />
+              <span id="dailyDatePretty" class="muted" style="font-size:12px;"></span>
+            </div>
+          </div>
 
-    const detCat = $("detailCategory");
-    detCat.innerHTML = "";
-    const optAll = document.createElement("option");
-    optAll.value = "all";
-    optAll.textContent = "전체";
-    detCat.appendChild(optAll);
+          <div class="statGrid">
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">수입</div>
+              <div id="dayIncome" class="statValue good">0원</div>
+            </div>
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">지출</div>
+              <div id="dayExpense" class="statValue bad">0원</div>
+            </div>
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">잔액</div>
+              <div id="dayBalance" class="statValue">0원</div>
+            </div>
+          </div>
+        </div>
 
-    for(const c of CATEGORIES){
-      const opt = document.createElement("option");
-      opt.value = c;
-      opt.textContent = c;
-      detCat.appendChild(opt);
-    }
+        <!-- 주별 요약 (일별요약과 동일한 주차의 날짜만 표시) -->
+        <div class="card">
+          <div class="cardTitle">
+            <h2>주별 요약</h2>
+            <div class="row">
+              <label class="muted" for="weeklyDate" style="margin:0;">날짜</label>
+              <select id="weeklyDate" style="width:auto; min-width:220px;"></select>
+              <span id="weeklyDatePretty" class="muted" style="font-size:12px;"></span>
+            </div>
+          </div>
 
-    const chipRow = $("categoryChips");
-    chipRow.innerHTML = "";
-    const allChip = document.createElement("button");
-    allChip.type="button";
-    allChip.className = "chip active";
-    allChip.textContent = "전체";
-    allChip.setAttribute("data-val","all");
-    chipRow.appendChild(allChip);
+          <div class="statGrid">
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">수입</div>
+              <div id="weekIncome" class="statValue good">0원</div>
+            </div>
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">지출</div>
+              <div id="weekExpense" class="statValue bad">0원</div>
+            </div>
+            <div class="card stat" style="background: rgba(0,0,0,.14); box-shadow:none;">
+              <div class="statLabel">잔액</div>
+              <div id="weekBalance" class="statValue">0원</div>
+            </div>
+          </div>
+        </div>
 
-    for(const c of CATEGORIES){
-      const ch = document.createElement("button");
-      ch.type="button";
-      ch.className = "chip";
-      ch.textContent = c;
-      ch.setAttribute("data-val", c);
-      chipRow.appendChild(ch);
-    }
+        <!-- (요구사항 6) 금액 + % 숫자 표시 -->
+        <div class="card half">
+          <div class="cardTitle">
+            <h2>지출 상위 카테고리</h2>
+            <div class="muted" style="font-size:12px;">선택한 월 기준 (금액 / %)</div>
+          </div>
+          <div id="topExpenseCats" class="barList"></div>
+        </div>
 
-    chipRow.querySelectorAll(".chip").forEach(ch => {
-      ch.addEventListener("click", () => {
-        detailCategory = ch.getAttribute("data-val");
-        $("detailCategory").value = detailCategory;
-        updateDetailSection();
-      });
-    });
-  }
+        <div class="card half">
+          <div class="cardTitle">
+            <h2>수입 상위 카테고리</h2>
+            <div class="muted" style="font-size:12px;">선택한 월 기준 (금액 / %)</div>
+          </div>
+          <div id="topIncomeCats" class="barList"></div>
+        </div>
+      </div>
+    </section>
 
-  function initDateInputs(){
-    $("selectedDate").min = START_DATE;
-    $("txDate").min = START_DATE;
+    <!-- 추가 -->
+    <section id="add" class="page">
+      <div class="grid">
+        <div class="card">
+          <div class="cardTitle">
+            <h2>내역 추가 / 수정</h2>
+            <div class="muted" style="font-size:12px;">저장은 이 기기 브라우저에만 남아</div>
+          </div>
 
-    $("detailDay").min = START_DATE;
-    $("detailWeek").min = START_DATE;
+          <form id="entryForm" class="form" autocomplete="off">
+            <input type="hidden" id="editingId" value="" />
+            <input type="hidden" id="type" value="expense" />
 
-    $("detailMonth").min = START_DATE.slice(0,7);
-    $("rankMonth").min = START_DATE.slice(0,7);
+            <div class="field half">
+              <label for="date">날짜</label>
+              <input id="date" type="date" required />
+            </div>
 
-    $("rankDay").min = START_DATE;
-    $("rankWeek").min = START_DATE;
-  }
+            <div class="field half">
+              <label>구분</label>
+              <div class="seg" role="tablist" aria-label="수입/지출 선택">
+                <button class="segBtn active" type="button" data-type="expense">지출</button>
+                <button class="segBtn" type="button" data-type="income">수입</button>
+              </div>
+              <div class="help">지출은 빨강, 수입은 초록으로 표시돼</div>
+            </div>
 
-  // =========================
-  // 8) 이벤트
-  // =========================
-  function bindEvents(){
-    $("nav-ledger").addEventListener("click", () => showPage("ledger"));
-    $("nav-rank").addEventListener("click", () => showPage("rank"));
+            <div class="field half">
+              <label for="category">카테고리</label>
+              <select id="category" required></select>
+              <input id="categoryCustom" type="text" placeholder="카테고리 직접 입력" style="margin-top:10px; display:none;" />
+            </div>
 
-    $("btnPrevDay").addEventListener("click", () => {
-      const next = addDays(selectedDate, -1);
-      if(next < START_DATE) return;
-      setSelectedDate(next);
-    });
-    $("btnNextDay").addEventListener("click", () => {
-      setSelectedDate(addDays(selectedDate, 1));
-    });
-    $("selectedDate").addEventListener("change", (e) => {
-      setSelectedDate(e.target.value);
-    });
+            <div class="field half">
+              <label for="amount">금액</label>
+              <!-- (요구사항 5) 1원부터 무한 입력: min=1, step=1 -->
+              <input id="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="예: 12000" required />
+              <div class="help">1원 이상 입력</div>
+            </div>
 
-    $("txForm").addEventListener("submit", (e) => {
-      e.preventDefault();
+            <div class="field">
+              <label for="memo">메모(선택)</label>
+              <input id="memo" type="text" maxlength="60" placeholder="예: 점심, 버스, 월급…" />
+            </div>
 
-      const date = $("txDate").value;
-      const type = $("txType").value;
-      const category = $("txCategory").value;
-      const amount = safeParseAmount($("txAmount").value);
-      const memo = $("txMemo").value.trim();
+            <div class="field">
+              <div class="actions">
+                <button id="submitBtn" class="btn primary" type="submit">저장</button>
+                <button id="cancelEditBtn" class="btn" type="button" style="display:none;">수정 취소</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
 
-      if(!date || date < START_DATE){
-        alert("날짜를 확인해줘 (2026-01-01 이후).");
-        return;
-      }
-      if(amount === null){
-        alert("금액을 숫자로 입력해줘.");
-        return;
-      }
+    <!-- 내역 -->
+    <section id="history" class="page">
+      <div class="grid">
+        <div class="card">
+          <div class="cardTitle">
+            <h2>내역</h2>
+          </div>
 
-      const tx = {
-        id: "tx_" + Date.now() + "_" + Math.random().toString(16).slice(2),
-        createdAt: Date.now(),
-        date,
-        type,
-        category,
-        amount,
-        memo
+          <!-- (요구사항 4,5) 기간: 일/주/월/년도 + (그 아래) 지출/수입 선택 + (그 아래) 카테고리/메모 -->
+          <div id="historyFilters" class="card" style="background: rgba(0,0,0,.14); box-shadow:none; margin-bottom:12px;">
+            <div class="form" style="gap:10px;">
+              <div class="field">
+                <label>기간</label>
+                <div class="seg" role="tablist" aria-label="기간 선택">
+                  <button class="segBtnAlt" type="button" data-period="day">일</button>
+                  <button class="segBtnAlt" type="button" data-period="week">주</button>
+                  <button class="segBtnAlt active" type="button" data-period="month">월</button>
+                  <button class="segBtnAlt" type="button" data-period="year">년도</button>
+                </div>
+                <input type="hidden" id="historyPeriod" value="month" />
+              </div>
+
+              <!-- 기간별 입력 (선택된 것만 표시) -->
+              <div class="field half" id="wrapHistoryDay" style="display:none;">
+                <label for="historyDay">일 선택</label>
+                <input id="historyDay" type="date" />
+              </div>
+
+              <div class="field half" id="wrapHistoryWeek" style="display:none;">
+                <label for="historyWeek">주 선택</label>
+                <input id="historyWeek" type="week" />
+              </div>
+
+              <div class="field half" id="wrapHistoryMonth">
+                <label for="historyMonth">월 선택</label>
+                <input id="historyMonth" type="month" />
+              </div>
+
+              <div class="field half" id="wrapHistoryYear" style="display:none;">
+                <label for="historyYear">년도 선택</label>
+                <input id="historyYear" type="number" min="1900" step="1" placeholder="예: 2026" />
+              </div>
+
+              <!-- (요구사항 4) 월(기간) 아래에 지출/수입 구분 -->
+              <div class="field">
+                <label>구분</label>
+                <div class="seg" role="tablist" aria-label="지출/수입 선택">
+                  <button class="segBtnAlt active" type="button" data-histtype="expense">지출</button>
+                  <button class="segBtnAlt" type="button" data-histtype="income">수입</button>
+                </div>
+                <input type="hidden" id="historyType" value="expense" />
+              </div>
+
+              <!-- (요구사항 4) 카테고리/메모 입력란을 지출/수입 아래로 -->
+              <div class="field">
+                <label for="historyQuery">카테고리/메모</label>
+                <input id="historyQuery" type="text" placeholder="카테고리/메모 검색" />
+              </div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-bottom:10px;">
+            <div class="chip" id="historyCount">0건</div>
+            <div class="chip bad" id="historySumExpense">지출 0원</div>
+            <div class="chip good" id="historySumIncome">수입 0원</div>
+            <div class="spacer"></div>
+            <button class="btn" type="button" id="quickToAdd">+ 추가로 이동</button>
+          </div>
+
+          <div id="historyList" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 설정 -->
+    <section id="settings" class="page">
+      <div class="grid">
+        <div class="card">
+          <div class="cardTitle">
+            <h2>백업 / 복원</h2>
+            <div class="muted" style="font-size:12px;">JSON/CSV로 내보내고 가져오기</div>
+          </div>
+
+          <div class="row" style="gap:10px; margin-bottom:12px;">
+            <button class="btn primary" type="button" id="exportJson">JSON 내보내기</button>
+            <button class="btn" type="button" id="exportCsv">CSV 내보내기</button>
+          </div>
+
+          <div class="card" style="background: rgba(0,0,0,.14); box-shadow:none;">
+            <div class="muted" style="font-size:12px; margin-bottom:10px;">
+              JSON 가져오기: 내보낸 파일을 선택하면 합치기/덮어쓰기 중 선택할 수 있어.
+            </div>
+            <div class="row" style="gap:10px;">
+              <input id="importFile" type="file" accept=".json,application/json" />
+              <button class="btn" type="button" id="importBtn">가져오기</button>
+            </div>
+          </div>
+
+          <div class="card" style="background: rgba(0,0,0,.14); box-shadow:none; margin-top:12px;">
+            <div class="row">
+              <div>
+                <div style="font-weight:900;">전체 삭제</div>
+                <div class="muted" style="font-size:12px;">이 기기의 저장된 내역이 모두 삭제돼</div>
+              </div>
+              <div class="spacer"></div>
+              <button class="btn danger" type="button" id="clearAll">전체 삭제</button>
+            </div>
+          </div>
+
+          <div class="help" style="margin-top:12px;">
+            참고: 이 앱은 <b>localStorage</b>에 저장돼. 같은 브라우저/기기에서만 유지되고,
+            시크릿 모드나 브라우저 데이터 삭제 시 사라질 수 있어.
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const $ = (sel, root = document) => root.querySelector(sel);
+      const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+      const STORAGE_KEY = "ledger_entries_v1";
+
+      const CATEGORIES = {
+        expense: ["식비", "교통", "주거/통신", "생활", "의료", "문화", "교육", "쇼핑", "여행", "기타", "직접입력"],
+        income: ["급여", "용돈", "부수입", "환급", "기타", "직접입력"],
       };
 
-      transactions.push(tx);
-      saveTx(transactions);
+      const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
-      $("txAmount").value = "";
-      $("txMemo").value = "";
+      const moneyFmt = new Intl.NumberFormat("ko-KR");
+      const money = (n) => `${moneyFmt.format(Math.round(n || 0))}원`;
 
-      refreshAll();
-    });
+      const todayISO = () => {
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      };
 
-    document.querySelectorAll(".tabBtn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        detailPeriod = btn.getAttribute("data-period");
-        document.querySelectorAll(".tabBtn").forEach(b => b.classList.toggle("active", b === btn));
-        updateDetailSection();
+      const monthISO = (dateStr) => (dateStr || "").slice(0, 7); // YYYY-MM
+
+      const uid = () => (Date.now().toString(36) + Math.random().toString(36).slice(2, 9));
+
+      function ymdFromDate(d) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      // ====== (추가) 일/주 요약용 유틸 ======
+      function parseYMD(ymd) {
+        const [y, m, d] = (ymd || "").split("-").map((x) => Number(x));
+        if (!y || !m || !d) return null;
+        return new Date(y, m - 1, d);
+      }
+
+      // "년 월 일 (요일)"
+      function prettyYmdKo(ymd) {
+        const dt = parseYMD(ymd);
+        if (!dt) return "";
+        const y = dt.getFullYear();
+        const m = dt.getMonth() + 1;
+        const d = dt.getDate();
+        const dow = DOW_KO[dt.getDay()];
+        return `${y}년 ${m}월 ${d}일 (${dow})`;
+      }
+
+      // 월요일~일요일(ISO 스타일) 주차 7일 리스트 생성
+      function weekDatesFromYMD(ymd) {
+        const dt = parseYMD(ymd);
+        if (!dt) return [];
+
+        const monday = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+        const day = monday.getDay(); // 0=일..6=토
+        const diffToMon = (day === 0) ? -6 : (1 - day);
+        monday.setDate(monday.getDate() + diffToMon);
+
+        const out = [];
+        for (let i = 0; i < 7; i++) {
+          const x = new Date(monday);
+          x.setDate(monday.getDate() + i);
+          out.push(ymdFromDate(x));
+        }
+        return out;
+      }
+      // ====== (추가) 끝 ======
+
+      function loadEntries() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function saveEntries(entries) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+      }
+
+      let entries = loadEntries();
+      entries.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+
+      function toast(msg) {
+        const el = $("#toast");
+        el.textContent = msg;
+        el.classList.add("show");
+        window.clearTimeout(toast._t);
+        toast._t = window.setTimeout(() => el.classList.remove("show"), 1600);
+      }
+
+      // ---------- 페이지 전환 ----------
+      function setPage(pageId) {
+        $$(".navBtn").forEach((b) => b.classList.toggle("active", b.dataset.page === pageId));
+        $$(".page").forEach((p) => p.classList.toggle("active", p.id === pageId));
+      }
+
+      $$(".navBtn").forEach((btn) => {
+        btn.addEventListener("click", () => setPage(btn.dataset.page));
       });
-    });
 
-    $("detailDay").addEventListener("change", (e) => {
-      if(detailPeriod !== "day") return;
-      setSelectedDate(e.target.value);
-    });
-    $("detailWeek").addEventListener("change", (e) => {
-      if(detailPeriod !== "week") return;
-      setSelectedDate(e.target.value);
-    });
-    $("detailMonth").addEventListener("change", (e) => {
-      if(detailPeriod !== "month") return;
-      setSelectedMonth(e.target.value);
-    });
-    $("detailYear").addEventListener("change", (e) => {
-      if(detailPeriod !== "year") return;
-      setSelectedYear(e.target.value);
-    });
+      // ---------- 폼(추가/수정) ----------
+      const entryForm = $("#entryForm");
+      const editingIdEl = $("#editingId");
+      const typeEl = $("#type");
+      const dateEl = $("#date");
+      const categoryEl = $("#category");
+      const categoryCustomEl = $("#categoryCustom");
+      const amountEl = $("#amount");
+      const memoEl = $("#memo");
+      const submitBtn = $("#submitBtn");
+      const cancelEditBtn = $("#cancelEditBtn");
 
-    $("detailCategory").addEventListener("change", (e) => {
-      detailCategory = e.target.value;
-      updateDetailSection();
-    });
-    $("detailType").addEventListener("change", (e) => {
-      detailType = e.target.value;
-      updateDetailSection();
-    });
+      function setType(type) {
+        typeEl.value = type;
+        $$(`.segBtn[data-type]`).forEach((b) => b.classList.toggle("active", b.dataset.type === type));
+        refreshCategoryOptions();
+      }
 
-    $("rankPeriod").addEventListener("change", (e) => {
-      rankPeriod = e.target.value;
-      applyRankFilterUI();
-      renderRankTables();
-    });
+      $$(`.segBtn[data-type]`).forEach((b) => {
+        b.addEventListener("click", () => setType(b.dataset.type));
+      });
 
-    $("rankDay").addEventListener("change", (e) => {
-      if(rankPeriod !== "day") return;
-      setSelectedDate(e.target.value);
-    });
-    $("rankWeek").addEventListener("change", (e) => {
-      if(rankPeriod !== "week") return;
-      setSelectedDate(e.target.value);
-    });
-    $("rankMonth").addEventListener("change", (e) => {
-      if(rankPeriod !== "month") return;
-      setSelectedMonth(e.target.value);
-    });
-    $("rankYear").addEventListener("change", (e) => {
-      if(rankPeriod !== "year") return;
-      setSelectedYear(e.target.value);
-    });
-  }
+      function refreshCategoryOptions() {
+        const type = typeEl.value;
+        const options = CATEGORIES[type] || ["기타", "직접입력"];
 
-  function showPage(which){
-    const isLedger = (which === "ledger");
-    $("page-ledger").classList.toggle("active", isLedger);
-    $("page-rank").classList.toggle("active", !isLedger);
+        const current = categoryEl.value;
+        categoryEl.innerHTML = options.map((c) => `<option value="${escapeHtmlAttr(c)}">${escapeHtml(c)}</option>`).join("");
 
-    $("nav-ledger").classList.toggle("active", isLedger);
-    $("nav-rank").classList.toggle("active", !isLedger);
+        const has = options.includes(current);
+        categoryEl.value = has ? current : options[0];
 
-    if(!isLedger){
-      applyRankFilterUI();
-      renderRankTables();
-    }
-  }
+        handleCategoryCustom();
+      }
 
-  function refreshAll(){
-    // 저장/삭제 후 최신 로드(안전)
-    transactions = loadTx();
+      function handleCategoryCustom() {
+        const isCustom = categoryEl.value === "직접입력";
+        categoryCustomEl.style.display = isCustom ? "block" : "none";
+        if (!isCustom) categoryCustomEl.value = "";
+      }
 
-    updateTopSummary();
-    applyDetailFilterStateToInputs();
-    updateDetailSection();
-    applyRankFilterUI();
-    renderRankTables();
-  }
+      categoryEl.addEventListener("change", handleCategoryCustom);
 
-  // =========================
-  // 9) 초기 실행
-  // =========================
-  (function init(){
-    initCategorySelects();
-    initDateInputs();
-    bindEvents();
-    setSelectedDate(START_DATE);
-  })();
+      function startEdit(entry) {
+        editingIdEl.value = entry.id;
+        dateEl.value = entry.date;
+        setType(entry.type);
+
+        const list = CATEGORIES[entry.type] || [];
+        if (list.includes(entry.category)) {
+          categoryEl.value = entry.category;
+          categoryCustomEl.value = "";
+        } else {
+          categoryEl.value = "직접입력";
+          categoryCustomEl.value = entry.category || "";
+        }
+        handleCategoryCustom();
+
+        amountEl.value = entry.amount;
+        memoEl.value = entry.memo || "";
+
+        submitBtn.textContent = "수정 저장";
+        cancelEditBtn.style.display = "inline-block";
+
+        setPage("add");
+        toast("수정 모드로 전환");
+      }
+
+      function endEditMode() {
+        editingIdEl.value = "";
+        submitBtn.textContent = "저장";
+        cancelEditBtn.style.display = "none";
+      }
+
+      cancelEditBtn.addEventListener("click", () => {
+        endEditMode();
+        entryForm.reset();
+        dateEl.value = todayISO();
+        setType("expense");
+        refreshCategoryOptions();
+        toast("수정 취소");
+      });
+
+      entryForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const type = typeEl.value;
+        const date = dateEl.value || todayISO();
+
+        let category = categoryEl.value;
+        if (category === "직접입력") category = (categoryCustomEl.value || "").trim();
+
+        const amount = Number(amountEl.value || 0);
+        const memo = (memoEl.value || "").trim();
+
+        if (!date) return toast("날짜를 입력해줘");
+        if (!category) return toast("카테고리를 입력해줘");
+
+        // (요구사항 5) 1원부터 무한
+        if (!Number.isFinite(amount) || amount < 1) return toast("금액은 1원 이상 입력해줘");
+
+        const editingId = editingIdEl.value;
+
+        if (editingId) {
+          const idx = entries.findIndex((x) => x.id === editingId);
+          if (idx >= 0) {
+            entries[idx] = { ...entries[idx], type, date, category, amount, memo };
+            toast("수정 완료");
+          } else {
+            toast("수정 대상이 없어 새로 저장할게");
+            entries.unshift({ id: uid(), type, date, category, amount, memo, createdAt: Date.now() });
+          }
+          endEditMode();
+        } else {
+          entries.unshift({ id: uid(), type, date, category, amount, memo, createdAt: Date.now() });
+          toast("저장 완료");
+        }
+
+        entries.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+        saveEntries(entries);
+
+        entryForm.reset();
+        dateEl.value = todayISO();
+        setType(type);
+        refreshCategoryOptions();
+
+        renderAll();
+        setPage("history");
+      });
+
+      // ---------- 내역(필터/리스트) ----------
+      const historyPeriodEl = $("#historyPeriod");
+      const historyDayEl = $("#historyDay");
+      const historyWeekEl = $("#historyWeek");
+      const historyMonthEl = $("#historyMonth");
+      const historyYearEl = $("#historyYear");
+      const historyTypeEl = $("#historyType");
+      const historyQueryEl = $("#historyQuery");
+
+      const wrapHistoryDay = $("#wrapHistoryDay");
+      const wrapHistoryWeek = $("#wrapHistoryWeek");
+      const wrapHistoryMonth = $("#wrapHistoryMonth");
+      const wrapHistoryYear = $("#wrapHistoryYear");
+
+      const historyListEl = $("#historyList");
+      const historyCountEl = $("#historyCount");
+      const historySumExpenseEl = $("#historySumExpense");
+      const historySumIncomeEl = $("#historySumIncome");
+
+      function setHistoryPeriod(period) {
+        historyPeriodEl.value = period;
+
+        // 버튼 active
+        $$("#historyFilters button[data-period]").forEach((b) => {
+          b.classList.toggle("active", b.dataset.period === period);
+        });
+
+        // 입력 표시
+        wrapHistoryDay.style.display = (period === "day") ? "block" : "none";
+        wrapHistoryWeek.style.display = (period === "week") ? "block" : "none";
+        wrapHistoryMonth.style.display = (period === "month") ? "block" : "none";
+        wrapHistoryYear.style.display = (period === "year") ? "block" : "none";
+
+        renderHistory();
+      }
+
+      function setHistoryType(type) {
+        historyTypeEl.value = type;
+        $$("#historyFilters button[data-histtype]").forEach((b) => {
+          b.classList.toggle("active", b.dataset.histtype === type);
+        });
+        renderHistory();
+      }
+
+      $$("#historyFilters button[data-period]").forEach((btn) => {
+        btn.addEventListener("click", () => setHistoryPeriod(btn.dataset.period));
+      });
+
+      $$("#historyFilters button[data-histtype]").forEach((btn) => {
+        btn.addEventListener("click", () => setHistoryType(btn.dataset.histtype));
+      });
+
+      // ISO Week 계산(week input용)
+      function isoWeekInfo(date) {
+        // UTC 기준
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        // 목요일을 기준으로 ISO week-year 결정
+        const dayNum = d.getUTCDay() || 7; // 1..7 (Mon..Sun)
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const isoYear = d.getUTCFullYear();
+        const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+        const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        return { isoYear, weekNo };
+      }
+
+      function toISOWeekString(date) {
+        const { isoYear, weekNo } = isoWeekInfo(date);
+        return `${isoYear}-W${String(weekNo).padStart(2, "0")}`;
+      }
+
+      function isoWeekStartEnd(weekStr) {
+        // weekStr: "YYYY-Www"
+        if (!weekStr || !/^(\d{4})-W(\d{2})$/.test(weekStr)) return null;
+        const [y, w] = weekStr.split("-W");
+        const isoYear = Number(y);
+        const isoWeek = Number(w);
+
+        // ISO week의 월요일 계산
+        const simple = new Date(Date.UTC(isoYear, 0, 1 + (isoWeek - 1) * 7));
+        const dow = simple.getUTCDay(); // 0=Sun..6=Sat
+        const monday = new Date(simple);
+        if (dow <= 4) {
+          monday.setUTCDate(simple.getUTCDate() - (dow === 0 ? 6 : (dow - 1)));
+        } else {
+          monday.setUTCDate(simple.getUTCDate() + (8 - dow));
+        }
+
+        const sunday = new Date(monday);
+        sunday.setUTCDate(monday.getUTCDate() + 6);
+
+        const start = `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2,"0")}-${String(monday.getUTCDate()).padStart(2,"0")}`;
+        const end = `${sunday.getUTCFullYear()}-${String(sunday.getUTCMonth() + 1).padStart(2,"0")}-${String(sunday.getUTCDate()).padStart(2,"0")}`;
+        return { start, end };
+      }
+
+      function getFilteredEntriesHistory() {
+        const period = historyPeriodEl.value; // day/week/month/year
+        const type = historyTypeEl.value; // expense/income
+        const q = (historyQueryEl.value || "").trim().toLowerCase();
+
+        const dayVal = historyDayEl.value;
+        const weekVal = historyWeekEl.value;
+        const monthVal = historyMonthEl.value;
+        const yearVal = String(historyYearEl.value || "").trim();
+
+        let weekRange = null;
+        if (period === "week") weekRange = isoWeekStartEnd(weekVal);
+
+        return entries.filter((e) => {
+          // 기간 필터
+          if (period === "day") {
+            if (!dayVal) return false;
+            if (e.date !== dayVal) return false;
+          } else if (period === "week") {
+            if (!weekRange) return false;
+            if (e.date < weekRange.start || e.date > weekRange.end) return false;
+          } else if (period === "month") {
+            if (!monthVal) return false;
+            if (monthISO(e.date) !== monthVal) return false;
+          } else if (period === "year") {
+            if (!yearVal) return false;
+            if ((e.date || "").slice(0, 4) !== yearVal) return false;
+          }
+
+          // 구분 필터(지출/수입)
+          if (e.type !== type) return false;
+
+          // 검색
+          if (q) {
+            const hay = `${e.category || ""} ${e.memo || ""}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+          }
+
+          return true;
+        });
+      }
+
+      function renderHistory() {
+        const list = getFilteredEntriesHistory();
+
+        let sumExpense = 0;
+        let sumIncome = 0;
+        list.forEach((e) => {
+          if (e.type === "expense") sumExpense += e.amount;
+          else sumIncome += e.amount;
+        });
+
+        historyCountEl.textContent = `${list.length}건`;
+        historySumExpenseEl.textContent = `지출 ${money(sumExpense)}`;
+        historySumIncomeEl.textContent = `수입 ${money(sumIncome)}`;
+
+        if (list.length === 0) {
+          historyListEl.innerHTML = `
+            <div class="empty">
+              조건에 맞는 내역이 없어.<br/>
+              기간/구분/검색을 바꿔줘.
+            </div>
+          `;
+          return;
+        }
+
+        historyListEl.innerHTML = list.map(renderEntryItem).join("");
+      }
+
+      function renderEntryItem(e) {
+        const isExpense = e.type === "expense";
+        const sign = isExpense ? "-" : "+";
+        const amtClass = isExpense ? "bad" : "good";
+        const chipClass = isExpense ? "bad" : "good";
+        const memo = (e.memo || "").trim();
+
+        return `
+          <div class="item" data-id="${escapeHtmlAttr(e.id)}">
+            <div class="itemLeft">
+              <div class="itemMeta">
+                <span class="chip ${chipClass}">${isExpense ? "지출" : "수입"}</span>
+                <span class="chip">${escapeHtml(e.date)}</span>
+                <span class="chip">${escapeHtml(e.category || "")}</span>
+              </div>
+              <div class="itemTitle">${escapeHtml(e.category || "")}</div>
+              <div class="itemMemo">${memo ? escapeHtml(memo) : "<span class='muted'>메모 없음</span>"}</div>
+            </div>
+
+            <div class="itemRight">
+              <div class="amount ${amtClass}">${sign}${moneyFmt.format(Math.round(e.amount || 0))}원</div>
+              <div class="miniActions">
+                <button class="miniBtn" type="button" data-action="edit">편집</button>
+                <button class="miniBtn danger" type="button" data-action="delete">삭제</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      historyListEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-action]");
+        if (!btn) return;
+
+        const item = e.target.closest(".item");
+        if (!item) return;
+
+        const id = item.getAttribute("data-id");
+        const action = btn.getAttribute("data-action");
+
+        const entry = entries.find((x) => x.id === id);
+        if (!entry) return toast("대상을 찾을 수 없어");
+
+        if (action === "delete") {
+          if (!confirm("이 내역을 삭제할까?")) return;
+          entries = entries.filter((x) => x.id !== id);
+          saveEntries(entries);
+          renderAll();
+          toast("삭제 완료");
+          return;
+        }
+
+        if (action === "edit") {
+          startEdit(entry);
+        }
+      });
+
+      [historyDayEl, historyWeekEl, historyMonthEl, historyYearEl, historyQueryEl].forEach((el) => {
+        el.addEventListener("input", () => renderHistory());
+      });
+
+      $("#quickToAdd").addEventListener("click", () => setPage("add"));
+
+      // ---------- 대시보드 ----------
+      const dashMonthEl = $("#dashMonth");
+      const dashIncomeEl = $("#dashIncome");
+      const dashExpenseEl = $("#dashExpense");
+      const dashBalanceEl = $("#dashBalance");
+      const topExpenseCatsEl = $("#topExpenseCats");
+      const topIncomeCatsEl = $("#topIncomeCats");
+
+      // 일별 요약 요소
+      const dailyDateEl = $("#dailyDate");
+      const dailyDatePrettyEl = $("#dailyDatePretty");
+      const dayIncomeEl = $("#dayIncome");
+      const dayExpenseEl = $("#dayExpense");
+      const dayBalanceEl = $("#dayBalance");
+
+      // 주별 요약 요소
+      const weeklyDateEl = $("#weeklyDate");
+      const weeklyDatePrettyEl = $("#weeklyDatePretty");
+      const weekIncomeEl = $("#weekIncome");
+      const weekExpenseEl = $("#weekExpense");
+      const weekBalanceEl = $("#weekBalance");
+
+      function sumByCategory(list) {
+        const map = {};
+        for (const e of list) {
+          const k = (e.category || "기타").trim() || "기타";
+          map[k] = (map[k] || 0) + (Number(e.amount) || 0);
+        }
+        return map;
+      }
+
+      // (요구사항 6) 금액 + 퍼센트(%)
+      function renderBars(container, map, totalAmount, emptyText) {
+        const entriesArr = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+        if (!totalAmount || totalAmount <= 0 || entriesArr.length === 0) {
+          container.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`;
+          return;
+        }
+
+        container.innerHTML = entriesArr.map(([name, val]) => {
+          const pct = Math.max(0, Math.min(100, (val / totalAmount) * 100));
+          return `
+            <div class="barRow">
+              <div>
+                <div class="barLabel">
+                  <span>${escapeHtml(name)}</span>
+                  <span>${money(val)}</span>
+                </div>
+                <div class="barTrack">
+                  <div class="barFill" style="width:${pct.toFixed(1)}%"></div>
+                </div>
+              </div>
+              <div class="barAmt">${pct.toFixed(1)}%</div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      function renderDashboard() {
+        const m = dashMonthEl.value;
+        const month = m || monthISO(todayISO());
+
+        const monthEntries = entries.filter((e) => monthISO(e.date) === month);
+
+        let income = 0;
+        let expense = 0;
+        const incomeList = [];
+        const expenseList = [];
+
+        for (const e of monthEntries) {
+          if (e.type === "expense") {
+            expense += e.amount || 0;
+            expenseList.push(e);
+          } else {
+            income += e.amount || 0;
+            incomeList.push(e);
+          }
+        }
+
+        const balance = income - expense;
+
+        dashIncomeEl.textContent = money(income);
+        dashExpenseEl.textContent = money(expense);
+        dashBalanceEl.textContent = money(balance);
+        dashBalanceEl.classList.toggle("good", balance > 0);
+        dashBalanceEl.classList.toggle("bad", balance < 0);
+
+        renderBars(topExpenseCatsEl, sumByCategory(expenseList), expense, "이번 달 지출 내역이 없어.");
+        renderBars(topIncomeCatsEl, sumByCategory(incomeList), income, "이번 달 수입 내역이 없어.");
+      }
+
+      // (수정) 일별요약: 달력 그대로 사용
+      function initDailyDateOptions() {
+        const base = dailyDateEl.value || todayISO();
+        dailyDateEl.value = base;
+
+        if (dailyDatePrettyEl) dailyDatePrettyEl.textContent = prettyYmdKo(base);
+
+        // 주별요약: 일별요약과 같은 주차의 날짜만 생성
+        syncWeeklyDatesFromDaily();
+      }
+
+      function renderDailySummary() {
+        const selected = dailyDateEl.value || todayISO();
+        if (dailyDateEl.value !== selected) dailyDateEl.value = selected;
+
+        if (dailyDatePrettyEl) dailyDatePrettyEl.textContent = prettyYmdKo(selected);
+
+        const dayEntries = entries.filter((e) => e.date === selected);
+
+        let income = 0;
+        let expense = 0;
+        for (const e of dayEntries) {
+          if (e.type === "expense") expense += e.amount || 0;
+          else income += e.amount || 0;
+        }
+        const balance = income - expense;
+
+        dayIncomeEl.textContent = money(income);
+        dayExpenseEl.textContent = money(expense);
+        dayBalanceEl.textContent = money(balance);
+        dayBalanceEl.classList.toggle("good", balance > 0);
+        dayBalanceEl.classList.toggle("bad", balance < 0);
+      }
+
+      function syncWeeklyDatesFromDaily() {
+        if (!weeklyDateEl) return;
+
+        const base = dailyDateEl.value || todayISO();
+        const days = weekDatesFromYMD(base);
+
+        weeklyDateEl.innerHTML = "";
+        for (const ymd of days) {
+          const opt = document.createElement("option");
+          opt.value = ymd;
+          opt.textContent = prettyYmdKo(ymd);
+          weeklyDateEl.appendChild(opt);
+        }
+
+        weeklyDateEl.value = days.includes(base) ? base : (days[0] || "");
+        if (weeklyDatePrettyEl) weeklyDatePrettyEl.textContent = prettyYmdKo(weeklyDateEl.value);
+
+        renderWeeklySummary();
+      }
+
+      function renderWeeklySummary() {
+        if (!weeklyDateEl || !weekIncomeEl || !weekExpenseEl || !weekBalanceEl) return;
+
+        const selected = weeklyDateEl.value || (dailyDateEl ? dailyDateEl.value : "");
+        const days = weekDatesFromYMD(selected);
+
+        if (days.length !== 7) {
+          weekIncomeEl.textContent = money(0);
+          weekExpenseEl.textContent = money(0);
+          weekBalanceEl.textContent = money(0);
+          weekBalanceEl.classList.remove("good", "bad");
+          return;
+        }
+
+        const start = days[0];
+        const end = days[6];
+
+        let income = 0;
+        let expense = 0;
+
+        for (const e of entries) {
+          if (!e || !e.date) continue;
+          if (e.date < start || e.date > end) continue;
+
+          if (e.type === "expense") expense += e.amount || 0;
+          else income += e.amount || 0;
+        }
+
+        const balance = income - expense;
+
+        weekIncomeEl.textContent = money(income);
+        weekExpenseEl.textContent = money(expense);
+        weekBalanceEl.textContent = money(balance);
+        weekBalanceEl.classList.toggle("good", balance > 0);
+        weekBalanceEl.classList.toggle("bad", balance < 0);
+      }
+
+      // 이벤트
+      dailyDateEl.addEventListener("change", () => {
+        renderDailySummary();
+        syncWeeklyDatesFromDaily();
+      });
+
+      if (weeklyDateEl) {
+        weeklyDateEl.addEventListener("change", () => {
+          if (weeklyDatePrettyEl) weeklyDatePrettyEl.textContent = prettyYmdKo(weeklyDateEl.value);
+          renderWeeklySummary();
+        });
+      }
+
+      dashMonthEl.addEventListener("input", () => {
+        // 히스토리 기본이 월일 때 편하게 맞춰줌
+        historyMonthEl.value = dashMonthEl.value;
+        renderAll();
+      });
+
+      // ---------- 설정(내보내기/가져오기/삭제) ----------
+      function download(filename, content, mime = "text/plain;charset=utf-8") {
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1200);
+      }
+
+      $("#exportJson").addEventListener("click", () => {
+        const payload = JSON.stringify({ exportedAt: new Date().toISOString(), entries }, null, 2);
+        download(`ledger-backup-${monthISO(todayISO())}.json`, payload, "application/json;charset=utf-8");
+        toast("JSON 내보내기 완료");
+      });
+
+      $("#exportCsv").addEventListener("click", () => {
+        const header = ["date", "type", "category", "amount", "memo"];
+        const rows = entries.map((e) => [
+          e.date || "",
+          e.type || "",
+          e.category || "",
+          String(e.amount || 0),
+          (e.memo || "").replace(/\r?\n/g, " "),
+        ]);
+
+        const csv = [header, ...rows].map((cols) => cols.map(csvCell).join(",")).join("\n");
+        download(`ledger-${monthISO(todayISO())}.csv`, csv, "text/csv;charset=utf-8");
+        toast("CSV 내보내기 완료");
+      });
+
+      const importFileEl = $("#importFile");
+      $("#importBtn").addEventListener("click", async () => {
+        const file = importFileEl.files && importFileEl.files[0];
+        if (!file) return toast("JSON 파일을 먼저 선택해줘");
+
+        const text = await file.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          return toast("JSON 형식이 아니야");
+        }
+
+        const arr = Array.isArray(data) ? data : (Array.isArray(data.entries) ? data.entries : null);
+        if (!arr) return toast("가져올 entries 배열을 찾지 못했어");
+
+        const cleaned = arr
+          .filter((x) => x && typeof x === "object")
+          .map((x) => ({
+            id: String(x.id || uid()),
+            date: String(x.date || ""),
+            type: x.type === "income" ? "income" : "expense",
+            category: String(x.category || "기타"),
+            amount: Number(x.amount || 0),
+            memo: String(x.memo || ""),
+            createdAt: Number(x.createdAt || Date.now()),
+          }))
+          // (요구사항 5) 1원 이상만 허용
+          .filter((x) => x.date && Number.isFinite(x.amount) && x.amount >= 1);
+
+        if (cleaned.length === 0) return toast("가져올 유효한 데이터가 없어(금액은 1원 이상)");
+
+        const merge = confirm("가져온 데이터를 기존 내역에 합칠까?\n확인: 합치기\n취소: 덮어쓰기");
+        if (merge) {
+          const byId = new Map(entries.map((e) => [e.id, e]));
+          for (const e of cleaned) {
+            if (byId.has(e.id)) {
+              byId.set(uid(), { ...e, id: uid(), createdAt: Date.now() });
+            } else {
+              byId.set(e.id, e);
+            }
+          }
+          entries = Array.from(byId.values());
+        } else {
+          if (!confirm("정말로 기존 내역을 덮어쓸까?")) return;
+          entries = cleaned;
+        }
+
+        entries.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+        saveEntries(entries);
+        importFileEl.value = "";
+        renderAll();
+        toast("가져오기 완료");
+      });
+
+      $("#clearAll").addEventListener("click", () => {
+        if (!confirm("저장된 내역을 전부 삭제할까?")) return;
+        entries = [];
+        saveEntries(entries);
+        renderAll();
+        toast("전체 삭제 완료");
+      });
+
+      // ---------- 유틸 ----------
+      function escapeHtml(str) {
+        return String(str)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+      function escapeHtmlAttr(str) {
+        return escapeHtml(str).replaceAll("`", "&#096;");
+      }
+      function csvCell(v) {
+        const s = String(v ?? "");
+        const escaped = s.replaceAll('"', '""');
+        return `"${escaped}"`;
+      }
+
+      // ---------- 초기값/렌더 ----------
+      function init() {
+        const today = todayISO();
+        dateEl.value = today;
+
+        const m = monthISO(today);
+        dashMonthEl.value = m;
+
+        // 내역 필터 기본값
+        historyMonthEl.value = m;
+        historyDayEl.value = today;
+        historyWeekEl.value = toISOWeekString(new Date());
+        historyYearEl.value = String(new Date().getFullYear());
+
+        setType("expense");
+        refreshCategoryOptions();
+
+        // (수정) 일별요약: 달력 기반 초기화 + 주별요약 동기화
+        initDailyDateOptions();
+
+        // 내역 기본: 월
+        setHistoryPeriod("month");
+        // 내역 기본: 지출
+        setHistoryType("expense");
+
+        renderAll();
+      }
+
+      function renderAll() {
+        renderDashboard();
+        renderDailySummary();
+        renderWeeklySummary();
+        renderHistory();
+      }
+
+      init();
+    })();
   </script>
+</body>
+</html>
