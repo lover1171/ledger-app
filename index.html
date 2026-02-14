@@ -42,7 +42,6 @@
       border-bottom:1px solid var(--line);
     }
 
-    /* (요구사항 1) 상단 문구 제거 -> 헤더는 네비만 남김 */
     .headerInner{
       max-width:1100px;
       margin:0 auto;
@@ -52,7 +51,6 @@
       justify-content:center;
     }
 
-    /* (요구사항 2) 요약/추가/내역/설정 최상단 가로 배치(작은 화면이면 가로 스크롤) */
     .navTabs{
       display:flex;
       gap:8px;
@@ -197,7 +195,6 @@
       overflow:hidden;
       background: rgba(0,0,0,.18);
     }
-    /* 추가 페이지(기존) 세그 버튼 */
     .segBtn{
       flex:1;
       padding:10px 10px;
@@ -212,7 +209,6 @@
       background: linear-gradient(180deg, rgba(36,52,107,.65), rgba(26,38,80,.35));
     }
 
-    /* 내역 페이지용(새로 추가) 세그 버튼: 기존 .segBtn 이벤트와 충돌 방지 */
     .segBtnAlt{
       flex:1;
       padding:10px 10px;
@@ -449,7 +445,7 @@
           </div>
         </div>
 
-        <!-- 일별 요약 (달력 사용 + "년 월 일 (요일)" 표기) -->
+        <!-- 일별 요약 -->
         <div class="card">
           <div class="cardTitle">
             <h2>일별 요약</h2>
@@ -476,7 +472,7 @@
           </div>
         </div>
 
-        <!-- 주별 요약 (일별요약과 동일한 주차의 날짜만 표시) -->
+        <!-- 주별 요약 -->
         <div class="card">
           <div class="cardTitle">
             <h2>주별 요약</h2>
@@ -503,7 +499,7 @@
           </div>
         </div>
 
-        <!-- (요구사항 6) 금액 + % 숫자 표시 -->
+        <!-- 금액 + % -->
         <div class="card half">
           <div class="cardTitle">
             <h2>지출 상위 카테고리</h2>
@@ -557,7 +553,6 @@
 
             <div class="field half">
               <label for="amount">금액</label>
-              <!-- (요구사항 5) 1원부터 무한 입력: min=1, step=1 -->
               <input id="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="예: 12000" required />
               <div class="help">1원 이상 입력</div>
             </div>
@@ -586,7 +581,6 @@
             <h2>내역</h2>
           </div>
 
-          <!-- (요구사항 4,5) 기간: 일/주/월/년도 + (그 아래) 지출/수입 선택 + (그 아래) 카테고리/메모 -->
           <div id="historyFilters" class="card" style="background: rgba(0,0,0,.14); box-shadow:none; margin-bottom:12px;">
             <div class="form" style="gap:10px;">
               <div class="field">
@@ -600,7 +594,6 @@
                 <input type="hidden" id="historyPeriod" value="month" />
               </div>
 
-              <!-- 기간별 입력 (선택된 것만 표시) -->
               <div class="field half" id="wrapHistoryDay" style="display:none;">
                 <label for="historyDay">일 선택</label>
                 <input id="historyDay" type="date" />
@@ -621,7 +614,6 @@
                 <input id="historyYear" type="number" min="1900" step="1" placeholder="예: 2026" />
               </div>
 
-              <!-- (요구사항 4) 월(기간) 아래에 지출/수입 구분 -->
               <div class="field">
                 <label>구분</label>
                 <div class="seg" role="tablist" aria-label="지출/수입 선택">
@@ -631,7 +623,6 @@
                 <input type="hidden" id="historyType" value="expense" />
               </div>
 
-              <!-- (요구사항 4) 카테고리/메모 입력란을 지출/수입 아래로 -->
               <div class="field">
                 <label for="historyQuery">카테고리/메모</label>
                 <input id="historyQuery" type="text" placeholder="카테고리/메모 검색" />
@@ -676,6 +667,17 @@
             </div>
           </div>
 
+          <!-- ✅ 추가: 붙여넣기 복원 -->
+          <div class="card" style="background: rgba(0,0,0,.14); box-shadow:none; margin-top:12px;">
+            <div class="muted" style="font-size:12px; margin-bottom:10px;">
+              JSON 텍스트 붙여넣기 가져오기: 백업 텍스트를 그대로 붙여넣고 복원할 수 있어.
+            </div>
+            <textarea id="importText" placeholder="여기에 JSON 텍스트 붙여넣기" style="height:160px;"></textarea>
+            <div class="actions" style="margin-top:10px;">
+              <button class="btn" type="button" id="importTextBtn">붙여넣기 복원</button>
+            </div>
+          </div>
+
           <div class="card" style="background: rgba(0,0,0,.14); box-shadow:none; margin-top:12px;">
             <div class="row">
               <div>
@@ -698,6 +700,27 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <!-- ✅ 백업 모달(공유/다운로드가 막히는 환경 대비) -->
+  <div id="backupModal" style="
+    position:fixed; inset:0; background:rgba(0,0,0,.55);
+    display:none; align-items:center; justify-content:center; padding:14px; z-index:9999;">
+    <div style="width:min(900px, 100%); background:rgba(10,14,30,.96);
+      border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.45);">
+      <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+        <div style="font-weight:900;">백업 텍스트</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" id="backupCopyBtn" class="btn">복사</button>
+          <button type="button" id="backupCloseBtn" class="btn danger">닫기</button>
+        </div>
+      </div>
+      <div class="muted" style="font-size:12px; margin:8px 0 10px;">
+        공유/다운로드가 막힌 환경이면 아래 내용을 복사해서 메모앱에 저장해.
+      </div>
+      <textarea id="backupText" style="width:100%; height:52vh;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;"></textarea>
+    </div>
+  </div>
+
   <script>
     (() => {
       "use strict";
@@ -706,13 +729,6 @@
       const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
       const STORAGE_KEY = "ledger_entries_v1";
-
-      // ✅ ✅ ✅ 여기 추가됨: INLINE_ENTRIES
-      // 여기에 기존 내역(JSON 배열)을 붙여넣어두면,
-      // localStorage가 비어있는 환경에서 "처음 1회" 자동으로 채워짐.
-      const INLINE_ENTRIES = [
-        /* 여기에 붙여넣기 */
-      ];
 
       // (옵션) 주(week)에서 전월/익월 데이터 섞이는 것 방지
       const CLAMP_WEEK_TO_MONTH = true;
@@ -746,14 +762,13 @@
         return `${yyyy}-${mm}-${dd}`;
       }
 
-      // ====== (추가) 일/주 요약용 유틸 ======
+      // ====== 일/주 요약용 유틸 ======
       function parseYMD(ymd) {
         const [y, m, d] = (ymd || "").split("-").map((x) => Number(x));
         if (!y || !m || !d) return null;
         return new Date(y, m - 1, d);
       }
 
-      // "년 월 일 (요일)"
       function prettyYmdKo(ymd) {
         const dt = parseYMD(ymd);
         if (!dt) return "";
@@ -764,7 +779,6 @@
         return `${y}년 ${m}월 ${d}일 (${dow})`;
       }
 
-      // 월요일~일요일(ISO 스타일) 주차 7일 리스트 생성
       function weekDatesFromYMD(ymd) {
         const dt = parseYMD(ymd);
         if (!dt) return [];
@@ -781,15 +795,12 @@
           out.push(ymdFromDate(x));
         }
 
-        // ✅ 월 경계 밖 날짜 제거(선택한 날짜의 "해당 월"만)
         if (CLAMP_WEEK_TO_MONTH) {
           const baseYM = (ymd || "").slice(0, 7);
           return out.filter((d) => d.slice(0, 7) === baseYM);
         }
-
         return out;
       }
-      // ====== (추가) 끝 ======
 
       function loadEntries() {
         try {
@@ -805,35 +816,6 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
       }
 
-      // ✅ ✅ ✅ 여기 추가됨: localStorage가 비어있으면 INLINE_ENTRIES 1회 주입
-      function bootstrapInlineEntriesIfEmpty() {
-        if (!Array.isArray(INLINE_ENTRIES) || INLINE_ENTRIES.length === 0) return;
-
-        const existing = loadEntries();
-        if (Array.isArray(existing) && existing.length > 0) return; // 이미 데이터 있으면 중복 주입 방지
-
-        // 안전 정리(필수 필드 보강)
-        const cleaned = INLINE_ENTRIES
-          .filter((x) => x && typeof x === "object")
-          .map((x) => ({
-            id: String(x.id || uid()),
-            date: String(x.date || ""),
-            type: x.type === "income" ? "income" : "expense",
-            category: String(x.category || "기타"),
-            amount: Number(x.amount || 0),
-            memo: String(x.memo || ""),
-            createdAt: Number(x.createdAt || Date.now()),
-          }))
-          .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.date) && Number.isFinite(x.amount) && x.amount >= 1);
-
-        if (cleaned.length === 0) return;
-
-        saveEntries(cleaned);
-      }
-
-      // ✅ 주입 실행 후 로드
-      bootstrapInlineEntriesIfEmpty();
-
       let entries = loadEntries();
       entries.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
 
@@ -843,6 +825,28 @@
         el.classList.add("show");
         window.clearTimeout(toast._t);
         toast._t = window.setTimeout(() => el.classList.remove("show"), 1600);
+      }
+
+      // ---------- 백업 모달 ----------
+      function showBackupModal(text) {
+        const wrap = document.getElementById("backupModal");
+        const ta = document.getElementById("backupText");
+        wrap.style.display = "flex";
+        ta.value = text;
+      }
+
+      function wireBackupModal() {
+        const wrap = document.getElementById("backupModal");
+        document.getElementById("backupCloseBtn").onclick = () => (wrap.style.display = "none");
+        document.getElementById("backupCopyBtn").onclick = async () => {
+          const t = document.getElementById("backupText").value;
+          try {
+            await navigator.clipboard.writeText(t);
+            toast("복사 완료");
+          } catch {
+            toast("복사 실패: 길게 눌러 전체 선택 후 복사해줘");
+          }
+        };
       }
 
       // ---------- 페이지 전환 ----------
@@ -952,8 +956,6 @@
 
         if (!date) return toast("날짜를 입력해줘");
         if (!category) return toast("카테고리를 입력해줘");
-
-        // (요구사항 5) 1원부터 무한
         if (!Number.isFinite(amount) || amount < 1) return toast("금액은 1원 이상 입력해줘");
 
         const editingId = editingIdEl.value;
@@ -1007,12 +1009,10 @@
       function setHistoryPeriod(period) {
         historyPeriodEl.value = period;
 
-        // 버튼 active
         $$("#historyFilters button[data-period]").forEach((b) => {
           b.classList.toggle("active", b.dataset.period === period);
         });
 
-        // 입력 표시
         wrapHistoryDay.style.display = (period === "day") ? "block" : "none";
         wrapHistoryWeek.style.display = (period === "week") ? "block" : "none";
         wrapHistoryMonth.style.display = (period === "month") ? "block" : "none";
@@ -1039,10 +1039,8 @@
 
       // ISO Week 계산(week input용)
       function isoWeekInfo(date) {
-        // UTC 기준
         const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        // 목요일을 기준으로 ISO week-year 결정
-        const dayNum = d.getUTCDay() || 7; // 1..7 (Mon..Sun)
+        const dayNum = d.getUTCDay() || 7;
         d.setUTCDate(d.getUTCDate() + 4 - dayNum);
         const isoYear = d.getUTCFullYear();
         const yearStart = new Date(Date.UTC(isoYear, 0, 1));
@@ -1056,15 +1054,13 @@
       }
 
       function isoWeekStartEnd(weekStr) {
-        // weekStr: "YYYY-Www"
         if (!weekStr || !/^(\d{4})-W(\d{2})$/.test(weekStr)) return null;
         const [y, w] = weekStr.split("-W");
         const isoYear = Number(y);
         const isoWeek = Number(w);
 
-        // ISO week의 월요일 계산
         const simple = new Date(Date.UTC(isoYear, 0, 1 + (isoWeek - 1) * 7));
-        const dow = simple.getUTCDay(); // 0=Sun..6=Sat
+        const dow = simple.getUTCDay();
         const monday = new Date(simple);
         if (dow <= 4) {
           monday.setUTCDate(simple.getUTCDate() - (dow === 0 ? 6 : (dow - 1)));
@@ -1081,8 +1077,8 @@
       }
 
       function getFilteredEntriesHistory() {
-        const period = historyPeriodEl.value; // day/week/month/year
-        const type = historyTypeEl.value; // expense/income
+        const period = historyPeriodEl.value;
+        const type = historyTypeEl.value;
         const q = (historyQueryEl.value || "").trim().toLowerCase();
 
         const dayVal = historyDayEl.value;
@@ -1094,7 +1090,6 @@
         if (period === "week") weekRange = isoWeekStartEnd(weekVal);
 
         return entries.filter((e) => {
-          // 기간 필터
           if (period === "day") {
             if (!dayVal) return false;
             if (e.date !== dayVal) return false;
@@ -1102,7 +1097,6 @@
             if (!weekRange) return false;
             if (e.date < weekRange.start || e.date > weekRange.end) return false;
 
-            // ✅ 주에서 월 경계 밖 제거(week의 시작 월 기준)
             if (CLAMP_WEEK_TO_MONTH) {
               const baseYM = weekRange.start.slice(0, 7);
               if (monthISO(e.date) !== baseYM) return false;
@@ -1115,10 +1109,8 @@
             if ((e.date || "").slice(0, 4) !== yearVal) return false;
           }
 
-          // 구분 필터(지출/수입)
           if (e.type !== type) return false;
 
-          // 검색
           if (q) {
             const hay = `${e.category || ""} ${e.memo || ""}`.toLowerCase();
             if (!hay.includes(q)) return false;
@@ -1226,14 +1218,12 @@
       const topExpenseCatsEl = $("#topExpenseCats");
       const topIncomeCatsEl = $("#topIncomeCats");
 
-      // 일별 요약 요소
       const dailyDateEl = $("#dailyDate");
       const dailyDatePrettyEl = $("#dailyDatePretty");
       const dayIncomeEl = $("#dayIncome");
       const dayExpenseEl = $("#dayExpense");
       const dayBalanceEl = $("#dayBalance");
 
-      // 주별 요약 요소
       const weeklyDateEl = $("#weeklyDate");
       const weeklyDatePrettyEl = $("#weeklyDatePretty");
       const weekIncomeEl = $("#weekIncome");
@@ -1249,7 +1239,6 @@
         return map;
       }
 
-      // 금액 + 퍼센트(%)
       function renderBars(container, map, totalAmount, emptyText) {
         const entriesArr = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
@@ -1313,9 +1302,7 @@
       function initDailyDateOptions() {
         const base = dailyDateEl.value || todayISO();
         dailyDateEl.value = base;
-
         if (dailyDatePrettyEl) dailyDatePrettyEl.textContent = prettyYmdKo(base);
-
         syncWeeklyDatesFromDaily();
       }
 
@@ -1368,7 +1355,6 @@
         const selected = weeklyDateEl.value || (dailyDateEl ? dailyDateEl.value : "");
         const days = weekDatesFromYMD(selected);
 
-        // ✅ clamp 때문에 1~7일까지 가능
         if (days.length === 0) {
           weekIncomeEl.textContent = money(0);
           weekExpenseEl.textContent = money(0);
@@ -1400,7 +1386,6 @@
         weekBalanceEl.classList.toggle("bad", balance < 0);
       }
 
-      // 이벤트
       dailyDateEl.addEventListener("change", () => {
         renderDailySummary();
         syncWeeklyDatesFromDaily();
@@ -1419,25 +1404,39 @@
       });
 
       // ---------- 설정(내보내기/가져오기/삭제) ----------
-      function download(filename, content, mime = "text/plain;charset=utf-8") {
+      async function smartExport(filename, content, mime) {
         const blob = new Blob([content], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1200);
+        const file = new File([blob], filename, { type: mime });
+
+        // 1) Share 우선
+        try {
+          if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+            await navigator.share({ files: [file], title: filename });
+            return { ok: true, mode: "share" };
+          }
+        } catch {}
+
+        // 2) clipboard
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(content);
+            return { ok: true, mode: "clipboard" };
+          }
+        } catch {}
+
+        // 3) 모달
+        showBackupModal(content);
+        return { ok: true, mode: "modal" };
       }
 
-      $("#exportJson").addEventListener("click", () => {
+      $("#exportJson").addEventListener("click", async () => {
         const payload = JSON.stringify({ exportedAt: new Date().toISOString(), entries }, null, 2);
-        download(`ledger-backup-${monthISO(todayISO())}.json`, payload, "application/json;charset=utf-8");
-        toast("JSON 내보내기 완료");
+        const filename = `ledger-backup-${monthISO(todayISO())}-${Date.now()}.json`;
+        const r = await smartExport(filename, payload, "application/json;charset=utf-8");
+        toast(r.mode === "share" ? "JSON 공유로 내보냄" : r.mode === "clipboard" ? "JSON이 복사됨" : "JSON 백업 텍스트 열림");
       });
 
-      $("#exportCsv").addEventListener("click", () => {
+      $("#exportCsv").addEventListener("click", async () => {
         const header = ["date", "type", "category", "amount", "memo"];
         const rows = entries.map((e) => [
           e.date || "",
@@ -1447,9 +1446,14 @@
           (e.memo || "").replace(/\r?\n/g, " "),
         ]);
 
-        const csv = [header, ...rows].map((cols) => cols.map(csvCell).join(",")).join("\n");
-        download(`ledger-${monthISO(todayISO())}.csv`, csv, "text/csv;charset=utf-8");
-        toast("CSV 내보내기 완료");
+        const csvBody = [header, ...rows].map((cols) => cols.map(csvCell).join(",")).join("\n");
+
+        // ✅ 엑셀 한글 깨짐 방지 BOM
+        const csvWithBom = "\ufeff" + csvBody;
+
+        const filename = `ledger-${monthISO(todayISO())}-${Date.now()}.csv`;
+        const r = await smartExport(filename, csvWithBom, "text/csv;charset=utf-8");
+        toast(r.mode === "share" ? "CSV 공유로 내보냄" : r.mode === "clipboard" ? "CSV가 복사됨" : "CSV 백업 텍스트 열림");
       });
 
       const importFileEl = $("#importFile");
@@ -1458,30 +1462,10 @@
         if (!file) return toast("JSON 파일을 먼저 선택해줘");
 
         const text = await file.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          return toast("JSON 형식이 아니야");
-        }
+        const r = parseAndCleanImportedJson(text);
+        if (!r.ok) return toast(r.msg);
 
-        const arr = Array.isArray(data) ? data : (Array.isArray(data.entries) ? data.entries : null);
-        if (!arr) return toast("가져올 entries 배열을 찾지 못했어");
-
-        const cleaned = arr
-          .filter((x) => x && typeof x === "object")
-          .map((x) => ({
-            id: String(x.id || uid()),
-            date: String(x.date || ""),
-            type: x.type === "income" ? "income" : "expense",
-            category: String(x.category || "기타"),
-            amount: Number(x.amount || 0),
-            memo: String(x.memo || ""),
-            createdAt: Number(x.createdAt || Date.now()),
-          }))
-          .filter((x) => x.date && Number.isFinite(x.amount) && x.amount >= 1);
-
-        if (cleaned.length === 0) return toast("가져올 유효한 데이터가 없어(금액은 1원 이상)");
+        const cleaned = r.cleaned;
 
         const merge = confirm("가져온 데이터를 기존 내역에 합칠까?\n확인: 합치기\n취소: 덮어쓰기");
         if (merge) {
@@ -1504,6 +1488,60 @@
         importFileEl.value = "";
         renderAll();
         toast("가져오기 완료");
+      });
+
+      function parseAndCleanImportedJson(text) {
+        let data;
+        try { data = JSON.parse(text); }
+        catch { return { ok:false, msg:"JSON 형식이 아니야" }; }
+
+        const arr = Array.isArray(data) ? data : (Array.isArray(data.entries) ? data.entries : null);
+        if (!arr) return { ok:false, msg:"가져올 entries 배열을 찾지 못했어" };
+
+        const cleaned = arr
+          .filter((x) => x && typeof x === "object")
+          .map((x) => ({
+            id: String(x.id || uid()),
+            date: String(x.date || ""),
+            type: x.type === "income" ? "income" : "expense",
+            category: String(x.category || "기타"),
+            amount: Number(x.amount || 0),
+            memo: String(x.memo || ""),
+            createdAt: Number(x.createdAt || Date.now()),
+          }))
+          .filter((x) => x.date && Number.isFinite(x.amount) && x.amount >= 1);
+
+        if (cleaned.length === 0) return { ok:false, msg:"가져올 유효한 데이터가 없어(금액은 1원 이상)" };
+        return { ok:true, cleaned };
+      }
+
+      $("#importTextBtn").addEventListener("click", () => {
+        const text = ($("#importText").value || "").trim();
+        if (!text) return toast("붙여넣을 JSON 텍스트가 없어");
+
+        const r = parseAndCleanImportedJson(text);
+        if (!r.ok) return toast(r.msg);
+
+        const cleaned = r.cleaned;
+
+        const merge = confirm("가져온 데이터를 기존 내역에 합칠까?\n확인: 합치기\n취소: 덮어쓰기");
+        if (merge) {
+          const byId = new Map(entries.map((e) => [e.id, e]));
+          for (const e of cleaned) {
+            if (byId.has(e.id)) byId.set(uid(), { ...e, id: uid(), createdAt: Date.now() });
+            else byId.set(e.id, e);
+          }
+          entries = Array.from(byId.values());
+        } else {
+          if (!confirm("정말로 기존 내역을 덮어쓸까?")) return;
+          entries = cleaned;
+        }
+
+        entries.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+        saveEntries(entries);
+        $("#importText").value = "";
+        renderAll();
+        toast("붙여넣기 복원 완료");
       });
 
       $("#clearAll").addEventListener("click", () => {
@@ -1534,6 +1572,8 @@
 
       // ---------- 초기값/렌더 ----------
       function init() {
+        wireBackupModal();
+
         const today = todayISO();
         dateEl.value = today;
 
@@ -1567,4 +1607,4 @@
     })();
   </script>
 </body>
-        </html>
+</html>
