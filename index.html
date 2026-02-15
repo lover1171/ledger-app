@@ -303,12 +303,13 @@
           </div>
         </div>
 
+        <!-- ✅ 요약 > 주별 요약(주차 표시 적용) -->
         <div class="card">
           <div class="cardTitle">
             <h2>주별 요약</h2>
             <div class="row">
               <label class="muted" for="weeklyDate" style="margin:0;">날짜</label>
-              <select id="weeklyDate" style="width:auto; min-width:220px;"></select>
+              <select id="weeklyDate" style="width:auto; min-width:260px;"></select>
               <span id="weeklyDatePretty" class="muted" style="font-size:12px;"></span>
             </div>
           </div>
@@ -426,9 +427,15 @@
                 <input id="historyDay" type="date" />
               </div>
 
-              <div class="field half" id="wrapHistoryWeek" style="display:none;">
-                <label for="historyWeek">주 선택</label>
-                <input id="historyWeek" type="week" />
+              <!-- ✅ 내역 주 선택: 월 + 주차(입력/선택) -->
+              <div class="field" id="wrapHistoryWeek" style="display:none;">
+                <label>주 선택</label>
+                <div class="row" style="gap:10px;">
+                  <input id="historyWeekMonth" type="month" style="flex:1; min-width:180px;" />
+                  <input id="historyWeekNo" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="주차(예: 2)" style="width:140px;" />
+                  <button class="btn" type="button" id="openWeekPicker">선택</button>
+                </div>
+                <div class="help">해당 월 기준 주차(일~토, 7일). 예: 1~7=1주차, 8~14=2주차… (단, 1일이 일요일이 아닌 달은 첫 일요일부터 1주차)</div>
               </div>
 
               <div class="field half" id="wrapHistoryMonth">
@@ -436,17 +443,9 @@
                 <input id="historyMonth" type="month" />
               </div>
 
-              <!-- ✅ 년도: 입력 + 클릭 선택 -->
               <div class="field half" id="wrapHistoryYear" style="display:none;">
                 <label for="historyYear">년도 선택</label>
-                <input
-                  id="historyYear"
-                  type="text"
-                  inputmode="numeric"
-                  pattern="[0-9]*"
-                  maxlength="4"
-                  placeholder="예: 2026"
-                />
+                <input id="historyYear" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="예: 2026" />
                 <div class="help">직접 입력(4자리) 또는 클릭해서 선택</div>
               </div>
 
@@ -459,7 +458,6 @@
                 <input type="hidden" id="historyType" value="expense" />
               </div>
 
-              <!-- ✅ 카테고리/메모: 입력 + 선택(자동완성) -->
               <div class="field">
                 <label for="historyQuery">카테고리/메모</label>
                 <input id="historyQuery" type="text" placeholder="카테고리/메모 검색" list="historyCategoryList" />
@@ -578,6 +576,23 @@
     </div>
   </div>
 
+  <!-- ✅ 내역 주차 선택 모달 -->
+  <div id="weekModal" style="
+    position:fixed; inset:0; background:rgba(0,0,0,.55);
+    display:none; align-items:center; justify-content:center; padding:14px; z-index:9996;">
+    <div style="width:min(520px, 100%); background:rgba(10,14,30,.96);
+      border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.45);">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div style="font-weight:900;">주차 선택</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" id="weekClose" class="btn danger">닫기</button>
+        </div>
+      </div>
+      <div id="weekRangeLabel" class="muted" style="font-size:12px; margin:10px 0;"></div>
+      <div id="weekGrid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px;"></div>
+    </div>
+  </div>
+
   <script>
     (() => {
       "use strict";
@@ -638,27 +653,110 @@
         return `${y}년 ${m}월 ${d}일 (${dow})`;
       }
 
-      function weekDatesFromYMD(ymd) {
+      // ========= 기존(내역 week input용 ISO 주) 유틸은 그대로 두되, 요약/내역 주차는 별도 규칙 적용 =========
+
+      // ✅ (요약/내역 주차 공통 규칙) "월 내 주차" 계산: 주는 일요일 시작, 7일 단위
+      // - 그 달의 1일이 일요일이면: 1~7 = 1주차, 8~14 = 2주차 ...
+      // - 그 달의 1일이 일요일이 아니면: 그 달의 첫 일요일부터 1주차 시작
+      //   (첫 일요일 이전 날짜는 주차 미인정(null))
+      function weekOfMonthSundayStart(ymd) {
+        const dt = parseYMD(ymd);
+        if (!dt) return null;
+
+        const y = dt.getFullYear();
+        const m = dt.getMonth(); // 0-based
+        const d = dt.getDate();
+
+        const first = new Date(y, m, 1);
+        const firstDow = first.getDay(); // 0=일..6=토
+
+        if (firstDow === 0) {
+          return Math.floor((d - 1) / 7) + 1;
+        }
+
+        const firstSundayDay = 1 + (7 - firstDow); // 1..7
+        if (d < firstSundayDay) return null;
+        return Math.floor((d - firstSundayDay) / 7) + 1;
+      }
+
+      // ✅ (요약 주별요약 전용) 주차 미인정(null) 구간은 "숨김": 빈 배열 반환
+      function weekDatesForDashboard(ymd) {
         const dt = parseYMD(ymd);
         if (!dt) return [];
 
-        const monday = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
-        const day = monday.getDay();
-        const diffToMon = (day === 0) ? -6 : (1 - day);
-        monday.setDate(monday.getDate() + diffToMon);
+        const y = dt.getFullYear();
+        const m = dt.getMonth(); // 0-based
+        const d = dt.getDate();
 
+        const first = new Date(y, m, 1);
+        const firstDow = first.getDay(); // 0=일..6=토
+        const lastDay = new Date(y, m + 1, 0).getDate();
+
+        const weekNo = weekOfMonthSundayStart(ymd);
+        if (weekNo === null) return []; // ✅ 숨김
+
+        let startDay;
+        if (firstDow === 0) startDay = 1 + (weekNo - 1) * 7;
+        else {
+          const firstSundayDay = 1 + (7 - firstDow);
+          startDay = firstSundayDay + (weekNo - 1) * 7;
+        }
+
+        const endDay = Math.min(lastDay, startDay + 6);
         const out = [];
-        for (let i = 0; i < 7; i++) {
-          const x = new Date(monday);
-          x.setDate(monday.getDate() + i);
-          out.push(ymdFromDate(x));
+        for (let day = startDay; day <= endDay; day++) out.push(ymdFromDate(new Date(y, m, day)));
+        return out;
+      }
+
+      // ✅ (내역 주 선택 전용) 월 + 주차 → 기간(start/end) 계산
+      function weekRangeForMonthWeek(monthStr, weekNo) {
+        // monthStr: "YYYY-MM", weekNo: number >=1
+        if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) return null;
+        const n = Number(weekNo);
+        if (!Number.isFinite(n) || n < 1) return null;
+
+        const [Y, M] = monthStr.split("-").map(Number);
+        const y = Y;
+        const m = M - 1; // 0-based
+        const first = new Date(y, m, 1);
+        const firstDow = first.getDay();
+        const lastDay = new Date(y, m + 1, 0).getDate();
+
+        let startDay;
+        if (firstDow === 0) {
+          startDay = 1 + (n - 1) * 7;
+        } else {
+          const firstSundayDay = 1 + (7 - firstDow);
+          startDay = firstSundayDay + (n - 1) * 7;
+          // 주차 미인정 구간 자체가 없도록 설계(weekNo 1은 firstSundayDay부터)
         }
 
-        if (CLAMP_WEEK_TO_MONTH) {
-          const baseYM = (ymd || "").slice(0, 7);
-          return out.filter((d) => d.slice(0, 7) === baseYM);
+        if (startDay < 1 || startDay > lastDay) return null;
+        const endDay = Math.min(lastDay, startDay + 6);
+
+        const start = ymdFromDate(new Date(y, m, startDay));
+        const end = ymdFromDate(new Date(y, m, endDay));
+        return { start, end };
+      }
+
+      // ✅ (내역 주 선택 전용) 해당 월의 최대 주차 계산
+      function maxWeekNoForMonth(monthStr) {
+        if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) return 0;
+        const [Y, M] = monthStr.split("-").map(Number);
+        const y = Y;
+        const m = M - 1;
+        const first = new Date(y, m, 1);
+        const firstDow = first.getDay();
+        const lastDay = new Date(y, m + 1, 0).getDate();
+
+        if (firstDow === 0) {
+          return Math.ceil(lastDay / 7);
+        } else {
+          const firstSundayDay = 1 + (7 - firstDow);
+          const remain = lastDay - firstSundayDay + 1;
+          if (remain <= 0) return 0;
+          return Math.ceil(remain / 7);
         }
-        return out;
       }
 
       function loadEntries() {
@@ -733,7 +831,7 @@
       }
       $$(".navBtn").forEach((btn) => btn.addEventListener("click", () => setPage(btn.dataset.page)));
 
-      // 추가/수정
+      // ---------- 폼(추가/수정) ----------
       const entryForm = $("#entryForm");
       const editingIdEl = $("#editingId");
       const typeEl = $("#type");
@@ -849,10 +947,12 @@
         setPage("history");
       });
 
-      // 내역(필터/리스트)
+      // ---------- 내역(필터/리스트) ----------
       const historyPeriodEl = $("#historyPeriod");
       const historyDayEl = $("#historyDay");
-      const historyWeekEl = $("#historyWeek");
+      const historyWeekMonthEl = $("#historyWeekMonth");
+      const historyWeekNoEl = $("#historyWeekNo");
+      const openWeekPickerBtn = $("#openWeekPicker");
       const historyMonthEl = $("#historyMonth");
       const historyYearEl = $("#historyYear");
       const historyTypeEl = $("#historyType");
@@ -868,7 +968,7 @@
       const historySumExpenseEl = $("#historySumExpense");
       const historySumIncomeEl = $("#historySumIncome");
 
-      // ✅ 카테고리 자동완성 목록
+      // ✅ 내역 카테고리 자동완성 목록
       const historyCategoryListEl = $("#historyCategoryList");
       function refreshHistoryCategoryDatalist() {
         if (!historyCategoryListEl) return;
@@ -909,65 +1009,95 @@
       $$("#historyFilters button[data-period]").forEach((btn) => btn.addEventListener("click", () => setHistoryPeriod(btn.dataset.period)));
       $$("#historyFilters button[data-histtype]").forEach((btn) => btn.addEventListener("click", () => setHistoryType(btn.dataset.histtype)));
 
-      // ISO Week
-      function isoWeekInfo(date) {
-        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        const dayNum = d.getUTCDay() || 7;
-        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-        const isoYear = d.getUTCFullYear();
-        const yearStart = new Date(Date.UTC(isoYear, 0, 1));
-        const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-        return { isoYear, weekNo };
+      // ✅ 내역 "주차" 입력 정리(숫자만)
+      function sanitizeWeekNoInput() {
+        const digits = (historyWeekNoEl.value || "").replace(/\D/g, "").slice(0, 2);
+        if (historyWeekNoEl.value !== digits) historyWeekNoEl.value = digits;
       }
-      function toISOWeekString(date) {
-        const { isoYear, weekNo } = isoWeekInfo(date);
-        return `${isoYear}-W${String(weekNo).padStart(2, "0")}`;
+      historyWeekNoEl.addEventListener("input", () => { sanitizeWeekNoInput(); renderHistory(); });
+      historyWeekMonthEl.addEventListener("input", () => { renderHistory(); refreshWeekPickerGrid(); });
+
+      // ✅ 내역 "년도" 입력 정리(숫자만)
+      historyYearEl.addEventListener("input", () => {
+        const digits = (historyYearEl.value || "").replace(/\D/g, "").slice(0, 4);
+        if (historyYearEl.value !== digits) historyYearEl.value = digits;
+        if (digits.length === 4) renderHistory();
+      });
+
+      // ---------- 내역 주차 선택 모달 ----------
+      const weekModal = $("#weekModal");
+      const weekGrid = $("#weekGrid");
+      const weekClose = $("#weekClose");
+      const weekRangeLabel = $("#weekRangeLabel");
+
+      function openWeekModal() {
+        refreshWeekPickerGrid();
+        weekModal.style.display = "flex";
       }
-      function isoWeekStartEnd(weekStr) {
-        if (!weekStr || !/^(\d{4})-W(\d{2})$/.test(weekStr)) return null;
-        const [y, w] = weekStr.split("-W");
-        const isoYear = Number(y);
-        const isoWeek = Number(w);
+      function closeWeekModal() {
+        weekModal.style.display = "none";
+      }
+      weekClose.addEventListener("click", closeWeekModal);
+      weekModal.addEventListener("click", (e) => { if (e.target === weekModal) closeWeekModal(); });
+      openWeekPickerBtn.addEventListener("click", openWeekModal);
 
-        const simple = new Date(Date.UTC(isoYear, 0, 1 + (isoWeek - 1) * 7));
-        const dow = simple.getUTCDay();
-        const monday = new Date(simple);
-        if (dow <= 4) monday.setUTCDate(simple.getUTCDate() - (dow === 0 ? 6 : (dow - 1)));
-        else monday.setUTCDate(simple.getUTCDate() + (8 - dow));
+      function refreshWeekPickerGrid() {
+        const m = historyWeekMonthEl.value || monthISO(todayISO());
+        const maxW = maxWeekNoForMonth(m);
 
-        const sunday = new Date(monday);
-        sunday.setUTCDate(monday.getUTCDate() + 6);
+        weekRangeLabel.textContent = maxW > 0 ? `${m} (1~${maxW}주차)` : `${m} (주차 없음)`;
 
-        const start = `${monday.getUTCFullYear()}-${String(monday.getUTCMonth()+1).padStart(2,"0")}-${String(monday.getUTCDate()).padStart(2,"0")}`;
-        const end = `${sunday.getUTCFullYear()}-${String(sunday.getUTCMonth()+1).padStart(2,"0")}-${String(sunday.getUTCDate()).padStart(2,"0")}`;
-        return { start, end };
+        weekGrid.innerHTML = "";
+        for (let w = 1; w <= maxW; w++) {
+          const r = weekRangeForMonthWeek(m, w);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn";
+          btn.textContent = `${w}주차`;
+          if (r) btn.title = `${r.start} ~ ${r.end}`;
+
+          // 선택 강조
+          const cur = Number((historyWeekNoEl.value || "").trim());
+          if (Number.isFinite(cur) && cur === w) btn.classList.add("primary");
+
+          btn.addEventListener("click", () => {
+            historyWeekNoEl.value = String(w);
+            closeWeekModal();
+            renderHistory();
+          });
+
+          weekGrid.appendChild(btn);
+        }
       }
 
+      // ---------- 내역 필터 ----------
       function getFilteredEntriesHistory() {
-        const period = historyPeriodEl.value;
-        const type = historyTypeEl.value;
+        const period = historyPeriodEl.value; // day/week/month/year
+        const type = historyTypeEl.value; // expense/income
         const q = (historyQueryEl.value || "").trim().toLowerCase();
 
         const dayVal = historyDayEl.value;
-        const weekVal = historyWeekEl.value;
+        const weekMonthVal = historyWeekMonthEl.value;  // YYYY-MM
+        const weekNoVal = historyWeekNoEl.value;        // "2"
         const monthVal = historyMonthEl.value;
         const yearVal = String(historyYearEl.value || "").trim();
 
         let weekRange = null;
-        if (period === "week") weekRange = isoWeekStartEnd(weekVal);
+        if (period === "week") {
+          sanitizeWeekNoInput();
+          weekRange = weekRangeForMonthWeek(weekMonthVal, Number(weekNoVal));
+        }
 
         return entries.filter((e) => {
+          // 기간 필터
           if (period === "day") {
             if (!dayVal) return false;
             if (e.date !== dayVal) return false;
           } else if (period === "week") {
-            if (!weekRange) return false;
+            if (!weekMonthVal || !weekRange) return false;
+            // 주는 해당 월 안에서만 인정
+            if (monthISO(e.date) !== weekMonthVal) return false;
             if (e.date < weekRange.start || e.date > weekRange.end) return false;
-
-            if (CLAMP_WEEK_TO_MONTH) {
-              const baseYM = weekRange.start.slice(0, 7);
-              if (monthISO(e.date) !== baseYM) return false;
-            }
           } else if (period === "month") {
             if (!monthVal) return false;
             if (monthISO(e.date) !== monthVal) return false;
@@ -976,12 +1106,15 @@
             if ((e.date || "").slice(0, 4) !== yearVal) return false;
           }
 
+          // 구분
           if (e.type !== type) return false;
 
+          // 검색
           if (q) {
             const hay = `${e.category || ""} ${e.memo || ""}`.toLowerCase();
             if (!hay.includes(q)) return false;
           }
+
           return true;
         });
       }
@@ -1019,8 +1152,12 @@
       function renderHistory() {
         const list = getFilteredEntriesHistory();
 
-        let sumExpense = 0, sumIncome = 0;
-        list.forEach((e) => { if (e.type === "expense") sumExpense += e.amount; else sumIncome += e.amount; });
+        let sumExpense = 0;
+        let sumIncome = 0;
+        list.forEach((e) => {
+          if (e.type === "expense") sumExpense += e.amount;
+          else sumIncome += e.amount;
+        });
 
         historyCountEl.textContent = `${list.length}건`;
         historySumExpenseEl.textContent = `지출 ${money(sumExpense)}`;
@@ -1043,6 +1180,7 @@
 
         const id = item.getAttribute("data-id");
         const action = btn.getAttribute("data-action");
+
         const entry = entries.find((x) => x.id === id);
         if (!entry) return toast("대상을 찾을 수 없어");
 
@@ -1054,30 +1192,17 @@
           toast("삭제 완료");
           return;
         }
+
         if (action === "edit") startEdit(entry);
       });
 
-      // 필터 입력 반응
-      [historyDayEl, historyWeekEl, historyMonthEl, historyQueryEl].forEach((el) => {
+      [historyDayEl, historyMonthEl, historyQueryEl].forEach((el) => {
         el.addEventListener("input", () => renderHistory());
-      });
-
-      // ✅ year 직접 입력: 숫자만/4자리만 + 4자리면 적용
-      historyYearEl.addEventListener("input", () => {
-        const digits = (historyYearEl.value || "").replace(/\D/g, "").slice(0, 4);
-        if (historyYearEl.value !== digits) historyYearEl.value = digits;
-        if (digits.length === 4) renderHistory();
-      });
-      historyYearEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          if ((historyYearEl.value || "").trim().length === 4) renderHistory();
-        }
       });
 
       $("#quickToAdd").addEventListener("click", () => setPage("add"));
 
-      // 대시보드
+      // ---------- 대시보드 ----------
       const dashMonthEl = $("#dashMonth");
       const dashIncomeEl = $("#dashIncome");
       const dashExpenseEl = $("#dashExpense");
@@ -1136,15 +1261,23 @@
         const month = m || monthISO(todayISO());
         const monthEntries = entries.filter((e) => monthISO(e.date) === month);
 
-        let income = 0, expense = 0;
-        const incomeList = [], expenseList = [];
+        let income = 0;
+        let expense = 0;
+        const incomeList = [];
+        const expenseList = [];
 
         for (const e of monthEntries) {
-          if (e.type === "expense") { expense += e.amount || 0; expenseList.push(e); }
-          else { income += e.amount || 0; incomeList.push(e); }
+          if (e.type === "expense") {
+            expense += e.amount || 0;
+            expenseList.push(e);
+          } else {
+            income += e.amount || 0;
+            incomeList.push(e);
+          }
         }
 
         const balance = income - expense;
+
         dashIncomeEl.textContent = money(income);
         dashExpenseEl.textContent = money(expense);
         dashBalanceEl.textContent = money(balance);
@@ -1158,18 +1291,23 @@
       function initDailyDateOptions() {
         const base = dailyDateEl.value || todayISO();
         dailyDateEl.value = base;
-        dailyDatePrettyEl.textContent = prettyYmdKo(base);
+        if (dailyDatePrettyEl) dailyDatePrettyEl.textContent = prettyYmdKo(base);
         syncWeeklyDatesFromDaily();
       }
 
       function renderDailySummary() {
         const selected = dailyDateEl.value || todayISO();
         if (dailyDateEl.value !== selected) dailyDateEl.value = selected;
-        dailyDatePrettyEl.textContent = prettyYmdKo(selected);
+        if (dailyDatePrettyEl) dailyDatePrettyEl.textContent = prettyYmdKo(selected);
 
         const dayEntries = entries.filter((e) => e.date === selected);
-        let income = 0, expense = 0;
-        for (const e of dayEntries) { if (e.type === "expense") expense += e.amount || 0; else income += e.amount || 0; }
+
+        let income = 0;
+        let expense = 0;
+        for (const e of dayEntries) {
+          if (e.type === "expense") expense += e.amount || 0;
+          else income += e.amount || 0;
+        }
         const balance = income - expense;
 
         dayIncomeEl.textContent = money(income);
@@ -1179,58 +1317,108 @@
         dayBalanceEl.classList.toggle("bad", balance < 0);
       }
 
+      // ✅ 요약 주별요약: 주차 미인정이면 드롭다운 숨김 + 0 처리
+      function renderWeeklySummaryEmpty() {
+        weekIncomeEl.textContent = money(0);
+        weekExpenseEl.textContent = money(0);
+        weekBalanceEl.textContent = money(0);
+        weekBalanceEl.classList.remove("good", "bad");
+      }
+
       function syncWeeklyDatesFromDaily() {
+        if (!weeklyDateEl) return;
+
         const base = dailyDateEl.value || todayISO();
-        const days = weekDatesFromYMD(base);
+        const days = weekDatesForDashboard(base);
+
+        // ✅ 첫 일요일 이전 날짜면 드롭다운 비우고 0 처리(숨김)
+        if (!days || days.length === 0) {
+          weeklyDateEl.innerHTML = "";
+          if (weeklyDatePrettyEl) weeklyDatePrettyEl.textContent = "해당 월 1주차(첫 일요일) 전";
+          renderWeeklySummaryEmpty();
+          return;
+        }
 
         weeklyDateEl.innerHTML = "";
         for (const ymd of days) {
+          const wk = weekOfMonthSundayStart(ymd);
           const opt = document.createElement("option");
           opt.value = ymd;
-          opt.textContent = prettyYmdKo(ymd);
+          opt.textContent = wk ? `${prettyYmdKo(ymd)} · ${wk}주차` : prettyYmdKo(ymd);
           weeklyDateEl.appendChild(opt);
         }
 
         weeklyDateEl.value = days.includes(base) ? base : (days[0] || "");
-        weeklyDatePrettyEl.textContent = prettyYmdKo(weeklyDateEl.value);
+
+        const wk = weekOfMonthSundayStart(weeklyDateEl.value);
+        if (weeklyDatePrettyEl) weeklyDatePrettyEl.textContent = wk ? `${prettyYmdKo(weeklyDateEl.value)} · ${wk}주차` : prettyYmdKo(weeklyDateEl.value);
+
         renderWeeklySummary();
       }
 
       function renderWeeklySummary() {
-        const selected = weeklyDateEl.value || dailyDateEl.value || "";
-        const days = weekDatesFromYMD(selected);
+        if (!weeklyDateEl || !weekIncomeEl || !weekExpenseEl || !weekBalanceEl) return;
 
-        if (days.length === 0) {
-          weekIncomeEl.textContent = money(0);
-          weekExpenseEl.textContent = money(0);
-          weekBalanceEl.textContent = money(0);
-          weekBalanceEl.classList.remove("good", "bad");
+        const selected = weeklyDateEl.value || (dailyDateEl ? dailyDateEl.value : "");
+        const days = weekDatesForDashboard(selected);
+
+        // 숨김 상태
+        if (!days || days.length === 0) {
+          renderWeeklySummaryEmpty();
           return;
         }
 
-        const start = days[0], end = days[days.length - 1];
-        let income = 0, expense = 0;
+        const start = days[0];
+        const end = days[days.length - 1];
+
+        let income = 0;
+        let expense = 0;
 
         for (const e of entries) {
-          if (!e?.date) continue;
+          if (!e || !e.date) continue;
           if (e.date < start || e.date > end) continue;
+
           if (e.type === "expense") expense += e.amount || 0;
           else income += e.amount || 0;
         }
 
         const balance = income - expense;
+
         weekIncomeEl.textContent = money(income);
         weekExpenseEl.textContent = money(expense);
         weekBalanceEl.textContent = money(balance);
         weekBalanceEl.classList.toggle("good", balance > 0);
         weekBalanceEl.classList.toggle("bad", balance < 0);
+
+        const wk = weekOfMonthSundayStart(selected);
+        if (weeklyDatePrettyEl) weeklyDatePrettyEl.textContent = wk ? `${prettyYmdKo(selected)} · ${wk}주차` : prettyYmdKo(selected);
       }
 
-      dailyDateEl.addEventListener("change", () => { renderDailySummary(); syncWeeklyDatesFromDaily(); });
-      weeklyDateEl.addEventListener("change", () => { weeklyDatePrettyEl.textContent = prettyYmdKo(weeklyDateEl.value); renderWeeklySummary(); });
-      dashMonthEl.addEventListener("input", () => { historyMonthEl.value = dashMonthEl.value; renderAll(); });
+      dailyDateEl.addEventListener("change", () => {
+        renderDailySummary();
+        syncWeeklyDatesFromDaily();
+      });
 
-      // ✅ CSV 내보내기: 다운로드 우선(PC) + 엑셀 친화(BOM + sep)
+      if (weeklyDateEl) {
+        weeklyDateEl.addEventListener("change", () => {
+          renderWeeklySummary();
+        });
+      }
+
+      dashMonthEl.addEventListener("input", () => {
+        historyMonthEl.value = dashMonthEl.value;
+        renderAll();
+      });
+
+      // ---------- 설정(내보내기/가져오기/삭제) ----------
+      $("#exportJson").addEventListener("click", async () => {
+        const payload = JSON.stringify({ exportedAt: new Date().toISOString(), entries }, null, 2);
+        const filename = `ledger-backup-${monthISO(todayISO())}-${Date.now()}.json`;
+        const r = await smartExport(filename, payload, "application/json;charset=utf-8");
+        toast(r.mode === "share" ? "JSON 공유로 내보냄" : r.mode === "clipboard" ? "JSON이 복사됨" : "JSON 백업 텍스트 열림");
+      });
+
+      // ✅ CSV: 다운로드 우선 + BOM + sep
       $("#exportCsv").addEventListener("click", async () => {
         const header = ["date", "type", "category", "amount", "memo"];
         const rows = entries.map((e) => [
@@ -1241,15 +1429,13 @@
           (e.memo || "").replace(/\r?\n/g, " "),
         ]);
 
-        const csvBody = [header, ...rows]
-          .map((cols) => cols.map(csvCell).join(","))
-          .join("\n");
-
+        const csvBody = [header, ...rows].map((cols) => cols.map(csvCell).join(",")).join("\n");
         const csvWithBom = "\ufeff" + "sep=,\n" + csvBody;
+
         const filename = `ledger-${monthISO(todayISO())}-${Date.now()}.csv`;
         const blob = new Blob([csvWithBom], { type: "text/csv;charset=utf-8" });
 
-        // 1) 다운로드 우선
+        // 다운로드 우선
         try {
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
@@ -1264,7 +1450,7 @@
           return;
         } catch {}
 
-        // 2) 공유
+        // 공유
         try {
           const file = new File([blob], filename, { type: "text/csv;charset=utf-8" });
           if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
@@ -1274,7 +1460,7 @@
           }
         } catch {}
 
-        // 3) 클립보드
+        // 클립보드
         try {
           if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(csvWithBom);
@@ -1285,14 +1471,6 @@
 
         showBackupModal(csvWithBom);
         toast("CSV 백업 텍스트 열림");
-      });
-
-      // JSON 내보내기
-      $("#exportJson").addEventListener("click", async () => {
-        const payload = JSON.stringify({ exportedAt: new Date().toISOString(), entries }, null, 2);
-        const filename = `ledger-backup-${monthISO(todayISO())}-${Date.now()}.json`;
-        const r = await smartExport(filename, payload, "application/json;charset=utf-8");
-        toast(r.mode === "share" ? "JSON 공유로 내보냄" : r.mode === "clipboard" ? "JSON이 복사됨" : "JSON 백업 텍스트 열림");
       });
 
       // ✅ XLSX 내보내기
@@ -1321,7 +1499,6 @@
 
         const filename = `ledger-${monthISO(todayISO())}-${Date.now()}.xlsx`;
 
-        // Share 우선(모바일/TWA)
         try {
           const file = new File([blob], filename, { type: blob.type });
           if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
@@ -1331,7 +1508,6 @@
           }
         } catch {}
 
-        // 다운로드(PC)
         try {
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
@@ -1349,14 +1525,15 @@
       }
       $("#exportXlsx").addEventListener("click", exportXlsxSmart);
 
-      // 가져오기/삭제
       const importFileEl = $("#importFile");
       $("#importBtn").addEventListener("click", async () => {
         const file = importFileEl.files && importFileEl.files[0];
         if (!file) return toast("JSON 파일을 먼저 선택해줘");
+
         const text = await file.text();
         const r = parseAndCleanImportedJson(text);
         if (!r.ok) return toast(r.msg);
+
         applyImported(r.cleaned);
         importFileEl.value = "";
       });
@@ -1364,8 +1541,10 @@
       $("#importTextBtn").addEventListener("click", () => {
         const text = ($("#importText").value || "").trim();
         if (!text) return toast("붙여넣을 JSON 텍스트가 없어");
+
         const r = parseAndCleanImportedJson(text);
         if (!r.ok) return toast(r.msg);
+
         applyImported(r.cleaned);
         $("#importText").value = "";
       });
@@ -1383,6 +1562,7 @@
           if (!confirm("정말로 기존 내역을 덮어쓸까?")) return;
           entries = cleaned;
         }
+
         entries.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
         saveEntries(entries);
         renderAll();
@@ -1422,6 +1602,7 @@
         toast("전체 삭제 완료");
       });
 
+      // ---------- 유틸 ----------
       function escapeHtml(str) {
         return String(str)
           .replaceAll("&", "&amp;")
@@ -1439,71 +1620,7 @@
         return `"${escaped}"`;
       }
 
-      // ✅ 연도 모달 (클릭 선택)
-      const yearModal = $("#yearModal");
-      const yearGrid = $("#yearGrid");
-      const yearPrev = $("#yearPrev");
-      const yearNext = $("#yearNext");
-      const yearClose = $("#yearClose");
-      const yearRangeLabel = $("#yearRangeLabel");
-
-      const YEAR_MIN = 1900;
-      const YEAR_MAX = 2100;
-      const YEAR_PAGE = 20;
-      let yearPageStart = Math.max(YEAR_MIN, (new Date().getFullYear() - 5));
-
-      function clampYearPageStart(v){
-        const maxStart = YEAR_MAX - (YEAR_PAGE - 1);
-        return Math.min(Math.max(v, YEAR_MIN), maxStart);
-      }
-
-      function renderYearGrid(){
-        const start = clampYearPageStart(yearPageStart);
-        const end = Math.min(YEAR_MAX, start + YEAR_PAGE - 1);
-        yearRangeLabel.textContent = `${start} ~ ${end}`;
-
-        const selected = Number((historyYearEl.value || "").trim());
-        yearGrid.innerHTML = "";
-
-        for (let y = start; y <= end; y++) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "btn";
-          btn.textContent = String(y);
-          if (Number.isFinite(selected) && selected === y) btn.classList.add("primary");
-
-          btn.addEventListener("click", () => {
-            historyYearEl.value = String(y);
-            yearModal.style.display = "none";
-            renderHistory();
-          });
-
-          yearGrid.appendChild(btn);
-        }
-      }
-
-      function openYearModal() {
-        const current = Number((historyYearEl.value || "").trim());
-        if (Number.isFinite(current) && current >= YEAR_MIN && current <= YEAR_MAX) {
-          yearPageStart = clampYearPageStart(current - Math.floor(YEAR_PAGE/2));
-        } else {
-          yearPageStart = clampYearPageStart(new Date().getFullYear() - 5);
-        }
-        renderYearGrid();
-        yearModal.style.display = "flex";
-      }
-
-      function closeYearModal() {
-        yearModal.style.display = "none";
-      }
-
-      historyYearEl.addEventListener("click", openYearModal);
-      yearPrev.addEventListener("click", () => { yearPageStart = clampYearPageStart(yearPageStart - YEAR_PAGE); renderYearGrid(); });
-      yearNext.addEventListener("click", () => { yearPageStart = clampYearPageStart(yearPageStart + YEAR_PAGE); renderYearGrid(); });
-      yearClose.addEventListener("click", closeYearModal);
-      yearModal.addEventListener("click", (e) => { if (e.target === yearModal) closeYearModal(); });
-
-      // 초기
+      // ---------- 초기값/렌더 ----------
       function init() {
         wireBackupModal();
 
@@ -1515,26 +1632,31 @@
 
         historyMonthEl.value = m;
         historyDayEl.value = today;
-        historyWeekEl.value = toISOWeekString(new Date());
         historyYearEl.value = String(new Date().getFullYear());
+
+        // 내역 주 기본: 현재 월, 현재 주차(미인정이면 1)
+        historyWeekMonthEl.value = m;
+        const wkToday = weekOfMonthSundayStart(today);
+        historyWeekNoEl.value = wkToday ? String(wkToday) : "1";
 
         setType("expense");
         refreshCategoryOptions();
+        refreshHistoryCategoryDatalist();
 
-        initDailyDateOptions();
+        initDailyDateOptions(); // 요약 주차 드롭다운도 여기서 셋업
+
         setHistoryPeriod("month");
         setHistoryType("expense");
 
-        refreshHistoryCategoryDatalist();
         renderAll();
       }
 
       function renderAll() {
         renderDashboard();
         renderDailySummary();
-        renderWeeklySummary();
-        refreshHistoryCategoryDatalist();
+        syncWeeklyDatesFromDaily();
         renderHistory();
+        refreshHistoryCategoryDatalist();
       }
 
       init();
